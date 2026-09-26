@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=GitHub Commit Manager
+Comment=Manage local Git repositories and GitHub sign-in
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/ghm-gui
+TryExec=@CMAKE_INSTALL_FULL_BINDIR@/ghm-gui
+Icon=io.github.ghm.CommitManager
+Terminal=false
+Categories=Development;
+Keywords=Git;GitHub;Repository;Commit;
+StartupNotify=true

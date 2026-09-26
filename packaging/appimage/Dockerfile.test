@@ -1,0 +1,13 @@
+ARG BASE_IMAGE=debian:13-slim
+FROM ${BASE_IMAGE}
+# Deliberately omit GTK, libgit2, curl, SQLite, libsecret and json-glib runtimes.
+# The portable payload must provide its own application libraries.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates xvfb xauth dbus-x11 fonts-dejavu-core \
+    desktop-file-utils libegl1 libgl1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home tester
+COPY packaging/appimage/check.sh packaging/appimage/check-install.sh \
+    packaging/appimage/check-runtime.sh /checks/
+USER tester
+ENTRYPOINT ["bash", "/checks/check-runtime.sh"]

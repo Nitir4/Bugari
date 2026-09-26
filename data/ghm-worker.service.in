@@ -1,0 +1,11 @@
+[Unit]
+Description=GitHub Commit Manager scheduled commit worker
+
+[Service]
+Type=simple
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/ghm-worker
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

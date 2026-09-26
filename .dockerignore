@@ -1,0 +1,13 @@
+*
+!CMakeLists.txt
+!README.md
+!include/
+!include/**
+!src/
+!src/**
+!data/
+!data/**
+!tests/
+!tests/**
+!packaging/
+!packaging/**

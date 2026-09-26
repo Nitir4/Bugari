@@ -1,0 +1,55 @@
+# Local builds and distribution packages
+/build/
+/build-*/
+/dist/
+/AppDir/
+/squashfs-root/
+*.AppImage
+*.AppImage.zsync
+*.AppImage.sha256
+*.o
+*.a
+*.so
+*.so.*
+CMakeUserPresets.json
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+/Testing/
+/Makefile
+*.gcda
+*.gcno
+/coverage/
+
+# Local tooling, credentials and application state
+/.agents/
+/.codex/
+/.cache/
+/.env
+/.env.*
+!/.env.example
+*.pem
+*.key
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Session notes and generated validation output
+/project_handover*.md
+/test_report*.md
+/validation_plan*.md
+/validation_artifacts/
+/test-artifacts/
+
+# Editor and desktop metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+__pycache__/
+*.pyc
