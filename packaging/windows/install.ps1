@@ -4,7 +4,13 @@ $marker = 'Managed by GitHub Commit Manager Windows installer'
 $source = $PSScriptRoot
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $taskName = 'GitHubCommitManager-' + $user.User.Value
-$hash = (Get-FileHash (Join-Path $source 'bin\ghm-gui.exe') -Algorithm SHA256).Hash.ToLower()
+$hash = (Get-FileHash (Join-Path $source 'SHA256SUMS') -Algorithm SHA256).Hash.ToLower()
+$guiHash = (Get-FileHash (Join-Path $source 'bin\ghm-gui.exe') -Algorithm SHA256).Hash.ToLower()
+$fullRoot = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd('\') + '\'
+$fullSource = [System.IO.Path]::GetFullPath($source).TrimEnd('\') + '\'
+if ($fullRoot.StartsWith($fullSource, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Choose an installation root outside the extracted package directory.'
+}
 $destination = Join-Path $InstallRoot ('versions\' + $hash.Substring(0, 16))
 $oldTask = Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue
 if ($oldTask -and $oldTask.Description -ne $marker) {
@@ -18,7 +24,8 @@ if (!(Test-Path $destination)) {
         throw "Package copy failed. No worker or shortcut was changed. Remove the incomplete folder $destination before retrying. $_"
     }
 }
-if ((Get-FileHash (Join-Path $destination 'bin\ghm-gui.exe') -Algorithm SHA256).Hash.ToLower() -ne $hash) {
+if ((Get-FileHash (Join-Path $destination 'bin\ghm-gui.exe') -Algorithm SHA256).Hash.ToLower() -ne $guiHash -or
+    (Get-FileHash (Join-Path $destination 'SHA256SUMS') -Algorithm SHA256).Hash.ToLower() -ne $hash) {
     throw 'An existing installation folder is incomplete or contains another build.'
 }
 $programs = [Environment]::GetFolderPath('Programs')

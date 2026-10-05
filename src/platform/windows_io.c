@@ -185,7 +185,19 @@ static unsigned owner(HANDLE file)
         TOKEN_USER *user = malloc(needed);
         if (user != NULL && GetTokenInformation(token, TokenUser, user, needed, &needed) &&
             EqualSid(sid, user->User.Sid)) result = 0;
-        free(user); CloseHandle(token);
+        free(user);
+        /* Elevated processes can create files owned by their TokenOwner group
+         * rather than TokenUser. Accept only this token's actual default owner,
+         * not an arbitrary group membership. */
+        if (result != 0) {
+            needed = 0;
+            GetTokenInformation(token, TokenOwner, NULL, 0, &needed);
+            TOKEN_OWNER *default_owner = malloc(needed);
+            if (default_owner != NULL && GetTokenInformation(token, TokenOwner,
+                default_owner, needed, &needed) && EqualSid(sid, default_owner->Owner)) result = 0;
+            free(default_owner);
+        }
+        CloseHandle(token);
     }
     LocalFree(security);
     return result;

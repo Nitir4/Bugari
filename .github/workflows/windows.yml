@@ -71,7 +71,7 @@ jobs:
         shell: pwsh
         run: |
           & packaging/windows/check.ps1 -PackagePath dist/GitHubCommitManager-0.1.0-windows-x86_64 -TestPath build-windows
-      - name: Upload tested candidate
+      - name: Check installed worker
         # The actual logon task is tested on this disposable runner as well.
         shell: pwsh
         run: |

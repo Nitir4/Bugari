@@ -180,23 +180,31 @@ int ghm_mutation_recover(git_repository *repo, GhmError *error)
     char *path = record_path(repo);
     int descriptor = path != NULL ? open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW) : -1;
     int result = -1;
+    const char *reason = "cannot open recovery record";
     if (descriptor < 0) {
         if (path != NULL && errno == ENOENT) { free(path); return 0; }
         goto inspection;
     }
     struct stat metadata;
     ssize_t received = read(descriptor, &record, sizeof(record));
-    int safe = fstat(descriptor, &metadata) == 0 && S_ISREG(metadata.st_mode) &&
-        metadata.st_uid == geteuid() && metadata.st_nlink == 1 &&
-        metadata.st_size == (off_t)sizeof(record) && received == (ssize_t)sizeof(record);
+    int safe = 0;
+    if (fstat(descriptor, &metadata) != 0) reason = "cannot inspect recovery record";
+    else if (!S_ISREG(metadata.st_mode) || metadata.st_nlink != 1) reason = "unsafe recovery record type or links";
+    else if (metadata.st_uid != geteuid()) reason = "recovery record has a different owner";
+    else if (metadata.st_size != (off_t)sizeof(record) || received != (ssize_t)sizeof(record))
+        reason = "incomplete recovery record";
+    else safe = 1;
     close(descriptor);
-    if (!safe || memcmp(record.magic, "GHMTXN1", 8) != 0 ||
+    if (!safe) goto inspection;
+    reason = "invalid recovery record";
+    if (memcmp(record.magic, "GHMTXN1", 8) != 0 ||
         !valid_branch(record.branch, sizeof(record.branch), 0, 0) ||
         !valid_branch(record.source, sizeof(record.source), 1, !record.switch_branch) ||
         memchr(record.original, '\0', sizeof(record.original)) == NULL ||
         memchr(record.target, '\0', sizeof(record.target)) == NULL ||
         memchr(record.index_tree, '\0', sizeof(record.index_tree)) == NULL) goto inspection;
     git_oid target_oid, original_oid, before_index_oid;
+    reason = "recovery commit objects are unavailable";
     if (git_oid_fromstr(&target_oid, record.target) < 0 ||
         git_oid_fromstr(&before_index_oid, record.index_tree) < 0 ||
         (!record.unborn && git_oid_fromstr(&original_oid, record.original) < 0) ||
@@ -216,9 +224,11 @@ int ghm_mutation_recover(git_repository *repo, GhmError *error)
             strcmp(git_reference_symbolic_target(symbolic), record.branch) == 0;
         git_reference_free(symbolic);
     }
+    reason = "branch changed after interrupted operation";
     if (!published && !untouched) goto inspection;
     /* Verify every leftover native lock before removing any. Missing locks
      * were already published/released. A replaced inode is never removed. */
+    reason = "native lock changed after interrupted operation";
     for (size_t i = 0; i < 4; ++i) {
         char *locked = native_lock_path(repo, &record, i);
         int differs = 0;
@@ -229,18 +239,22 @@ int ghm_mutation_recover(git_repository *repo, GhmError *error)
         free(locked);
         if (differs) goto inspection;
     }
+    reason = "cannot remove interrupted native lock";
     for (size_t i = 0; i < 4; ++i) {
         char *locked = native_lock_path(repo, &record, i);
         if (locked != NULL && unlink(locked) != 0 && errno != ENOENT) { free(locked); goto inspection; }
         free(locked);
     }
+    reason = "cannot reserve or read recovery index";
     if (ghm_index_lock_acquire(&native_index, repo, error) != 0 ||
         git_repository_index(&index, repo) < 0 || git_index_read(index, 1) < 0 || git_index_has_conflicts(index)) goto inspection;
     git_oid current_index_oid;
+    reason = "index changed after interrupted operation";
     if (git_index_write_tree_to(&current_index_oid, index, repo) < 0 ||
         (!git_oid_equal(&current_index_oid, &before_index_oid) &&
          !git_oid_equal(&current_index_oid, git_commit_tree_id(target)))) goto inspection;
     if (record.checkout_files && untouched) {
+        reason = "safe checkout rollback failed";
         git_checkout_options checkout = {0};
         if (git_checkout_options_init(&checkout, GIT_CHECKOUT_OPTIONS_VERSION) < 0 ||
             original == NULL || git_commit_tree(&baseline, target) < 0) goto inspection;
@@ -249,16 +263,21 @@ int ghm_mutation_recover(git_repository *repo, GhmError *error)
         if (git_checkout_tree(repo, (git_object *)original, &checkout) < 0) goto inspection;
     }
     if ((record.checkout_files && untouched) || (record.sync_index && published)) {
+        reason = "cannot restore recovery index";
         if (published ? git_commit_tree(&index_tree, target) < 0 : git_tree_lookup(&index_tree, repo, &before_index_oid) < 0)
             goto inspection;
         if (git_index_read_tree(index, index_tree) < 0 || ghm_index_lock_write(&native_index, index, error) != 0) goto inspection;
     }
+    reason = "cannot remove completed recovery record";
     if (unlink(path) != 0) goto inspection;
     result = 0;
     goto done;
-inspection:
-    ghm_error_set(error, GHM_ERROR_IO,
-        "Interrupted operation needs inspection: unexpected edits, locks, or failed safe rollback. Recovery record was kept");
+inspection: {
+    char message[256];
+    (void)snprintf(message, sizeof(message),
+        "Interrupted operation needs inspection: %s. Recovery record was kept", reason);
+    ghm_error_set(error, GHM_ERROR_IO, message);
+}
 done:
     free(path); git_reference_free(head); git_commit_free(target); git_commit_free(original);
     git_tree_free(baseline); git_tree_free(index_tree); git_index_free(index);
