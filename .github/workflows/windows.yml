@@ -1,0 +1,93 @@
+name: Windows candidate
+
+on:
+  push:
+    branches: [feature/windows-support]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install native dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build pkg-config libgtk-4-dev libgit2-dev libcurl4-openssl-dev libsqlite3-dev libsecret-1-dev libjson-glib-dev
+      - name: Build and test Linux
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 4
+          ctest --test-dir build --output-on-failure
+  build-test-package:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Preserve source line endings
+        shell: pwsh
+        run: git config --global core.autocrlf input
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libgit2
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-json-glib
+            mingw-w64-ucrt-x86_64-python
+      - name: Build and test native Windows code
+        env:
+          GHM_GITHUB_CLIENT_ID: ${{ vars.GHM_GITHUB_CLIENT_ID }}
+        run: |
+          cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DGHM_GITHUB_CLIENT_ID=$GHM_GITHUB_CLIENT_ID"
+          cmake --build build-windows --parallel 4
+          ctest --test-dir build-windows --output-on-failure
+      - name: Bundle runtime
+        run: |
+          pacman -Q > build-windows/packages.txt
+          python packaging/windows/bundle.py --build build-windows --prefix /ucrt64 --output dist/GitHubCommitManager-0.1.0-windows-x86_64 --inventory build-windows/packages.txt
+      - name: Check package without MSYS2 on PATH
+        shell: pwsh
+        run: |
+          & packaging/windows/check.ps1 -PackagePath dist/GitHubCommitManager-0.1.0-windows-x86_64 -TestPath build-windows
+      - name: Upload tested candidate
+        # The actual logon task is tested on this disposable runner as well.
+        shell: pwsh
+        run: |
+          & packaging/windows/check-install.ps1 -PackagePath dist/GitHubCommitManager-0.1.0-windows-x86_64
+      - name: Upload tested candidate artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: GitHubCommitManager-windows-x86_64-candidate
+          path: |
+            dist/GitHubCommitManager-0.1.0-windows-x86_64.zip
+            dist/GitHubCommitManager-0.1.0-windows-x86_64.zip.sha256
+          if-no-files-found: error
+      - name: Upload failed test logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-test-logs
+          path: build-windows/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore

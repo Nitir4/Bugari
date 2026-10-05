@@ -29,7 +29,7 @@ Use `CONTAINER_ENGINE=podman` for Podman. The current recipe targets x86_64 and
 requires the public Client ID of a GitHub OAuth application with Device Flow
 enabled. No secret, saved token or user database enters the build context.
 
-The build runs all 22 CTests and the isolated local GUI workflow/stress under
+The build runs all 23 CTests and the isolated local GUI workflow/stress under
 Xvfb. It then copies the payload, dynamic libraries, GTK resources and dependency
 license notices into an AppDir. Private libraries use relative ELF RPATHs;
 `LD_LIBRARY_PATH` is not exported to host browser/portal child programs. The

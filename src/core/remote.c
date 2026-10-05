@@ -18,6 +18,8 @@ static int push_branch(const char *repository_path, const char *client_id,
 #include <sys/stat.h>
 #include <ctype.h>
 #include <time.h>
+#include "platform/io.h"
+#include <glib.h>
 
 void ghm_remote_error_classify(const char *message, int error_class, GhmError *error)
 {
@@ -302,7 +304,7 @@ static int push_branch_unlocked(const char *repository_path, const char *client_
         }
         if (ghm_credentials_access_token(client_id, &token, error) != 0) goto done;
         credentials.token = token;
-    } else if (remote_url[0] != '/') {
+    } else if (!g_path_is_absolute(remote_url)) {
         ghm_error_set(error, GHM_ERROR_GIT,
                       "Push supports GitHub HTTPS or local remotes; change the origin URL to GitHub HTTPS");
         goto done;
@@ -413,7 +415,7 @@ static int ghm_repo_fetch_unlocked(const char *repository_path, const char *clie
         }
         if (ghm_credentials_access_token(client_id, &token, error) != 0) goto done;
         credentials.token = token;
-    } else if (url[0] != '/') {
+    } else if (!g_path_is_absolute(url)) {
         ghm_error_set(error, GHM_ERROR_GIT,
                       "Fetch supports GitHub HTTPS or local remotes; change origin to GitHub HTTPS");
         goto done;

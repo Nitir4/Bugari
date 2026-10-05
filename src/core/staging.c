@@ -10,6 +10,9 @@ static int valid_relative_path(const char *path)
 {
     const char *part;
     if (path == NULL || path[0] == '\0' || path[0] == '/') return 0;
+#ifdef _WIN32
+    if (strpbrk(path, "\\:") != NULL) return 0;
+#endif
     part = path;
     for (const char *cursor = path;; ++cursor) {
         if (*cursor == '/' || *cursor == '\0') {

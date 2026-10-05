@@ -7,12 +7,20 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-The 22 registered tests use disposable repositories and databases. They cover
+The 23 registered Linux tests use disposable repositories and databases. They cover
 commits, branches, merging, history, diffs, staging, file operations, frozen
 snapshots, scheduling, locks, linked worktrees, interrupted mutation recovery,
 SQLite failures, authentication response handling and push retries. Fault
 injection is compiled into a separate, uninstalled test library. Production
 binaries do not support test fault controls.
+
+Windows registers authentication response, datetime, synthetic credential and
+portable integration tests. The portable test also runs on Linux and covers
+staging, Unicode paths, safe editor saves, process locks, interrupted commit
+publication, frozen/chained jobs, background execution, exact local pushes,
+and SQLite completion recovery. See [Windows validation](../packaging/windows/README.md)
+for native CI and package checks. Linux-specific process/namespace tests are
+not silently counted as Windows coverage.
 
 ## GUI workflow and stress
 

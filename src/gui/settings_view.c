@@ -73,7 +73,11 @@ GtkWidget *ghm_settings_view_new(void)
     GtkWidget *scroll = gtk_scrolled_window_new();
     SettingsState *state = g_new0(SettingsState, 1);
     state->log_view = gtk_text_view_new();
+#ifdef _WIN32
+    state->message = gtk_label_new("Application log: your Windows application data folder, ghm/state/ghm.log");
+#else
     state->message = gtk_label_new("Application log: ~/.local/state/ghm/ghm.log");
+#endif
     gtk_label_set_xalign(GTK_LABEL(state->message), 0.0f);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(state->log_view), FALSE);
     gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(state->log_view), FALSE);

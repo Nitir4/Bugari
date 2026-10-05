@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include "platform/io.h"
 
 typedef struct {
     int64_t id;
@@ -179,7 +180,7 @@ static int valid_signature(const GhmCommitSignature *signature)
 {
     return signature != NULL && signature->name != NULL && signature->name[0] != '\0' &&
            signature->email != NULL && signature->email[0] != '\0' &&
-           signature->timestamp >= 0 && signature->timestamp <= LONG_MAX &&
+           signature->timestamp >= 0 && signature->timestamp <= INT64_MAX &&
            signature->offset_minutes >= -14 * 60 && signature->offset_minutes <= 14 * 60;
 }
 

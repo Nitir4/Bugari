@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "platform/io.h"
 
 #define GHM_FILE_LIMIT 5000U
 
@@ -93,6 +94,9 @@ static int walk_directory(FileWalker *walker, const char *relative)
         if (strcmp(names[i]->d_name, ".") == 0 ||
             strcmp(names[i]->d_name, "..") == 0 ||
             strcmp(names[i]->d_name, ".git") == 0) continue;
+#ifdef _WIN32
+        if (g_ascii_strcasecmp(names[i]->d_name, ".git") == 0) continue;
+#endif
         child = join_path(relative, names[i]->d_name);
         if (child != NULL) full = join_path(walker->root, child);
         if (child == NULL || full == NULL) {

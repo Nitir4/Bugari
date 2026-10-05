@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "platform/io.h"
 
 /* Worktree-specific record, not committed content. Ref names are validated
  * before deriving paths; no path from the record is ever passed to unlink. */
