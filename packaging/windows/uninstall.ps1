@@ -7,6 +7,16 @@ $task = Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction Silentl
 if ($task) {
     if ($task.Description -ne $marker) { throw 'The worker task is custom; it was preserved.' }
     Stop-ScheduledTask -TaskName $taskName -TaskPath '\'
+    # Task Scheduler's stop request can return before the executable and DLLs
+    # are unmapped. Wait for that exact managed image; never kill other workers.
+    $workerPath = $task.Actions[0].Execute
+    $deadline = (Get-Date).AddSeconds(10)
+    do {
+        $running = @(Get-Process -Name 'ghm-worker' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $workerPath })
+        if ($running.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 200
+    } while ((Get-Date) -lt $deadline)
+    if ($running.Count -gt 0) { throw 'The managed worker has not stopped yet. Close it before retrying uninstall.' }
     Unregister-ScheduledTask -TaskName $taskName -TaskPath '\' -Confirm:$false
 }
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'GitHub Commit Manager.lnk'

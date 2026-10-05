@@ -18,13 +18,18 @@ try {
     Start-Sleep -Seconds 5
     $task = Get-ScheduledTask -TaskName $taskName -TaskPath '\'
     if ($task.State -ne 'Running' -or !(Test-Path $shortcut) -or
-        !(Test-Path $task.Actions[0].Execute)) { throw 'The installed worker or launcher did not start correctly.' }
+        !(Test-Path $task.Actions[0].Execute)) {
+        $info = Get-ScheduledTaskInfo -TaskName $taskName -TaskPath '\'
+        throw "The installed worker or launcher did not start correctly. State=$($task.State), result=$($info.LastTaskResult)."
+    }
     & (Join-Path $package 'uninstall.ps1') -InstallRoot $root -RemoveFiles
     if ((Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue) -or (Test-Path $shortcut)) {
         throw 'The installer left a task or shortcut behind.'
     }
     Write-Host 'PASS real Task Scheduler worker installation, startup and uninstall on a disposable Windows runner'
 } finally {
-    & (Join-Path $package 'uninstall.ps1') -InstallRoot $root -RemoveFiles
-    if (Test-Path $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    try {
+        & (Join-Path $package 'uninstall.ps1') -InstallRoot $root -RemoveFiles
+        if (Test-Path $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    } catch { Write-Warning "Installation-check cleanup failed: $_" }
 }
