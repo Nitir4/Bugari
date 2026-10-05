@@ -4,8 +4,10 @@ Supports x86_64 Windows 10/11. This candidate still needs native desktop
 validation. The package bundles its libraries; no MSYS2 or compiler is needed.
 
 1. Extract the whole ZIP to a folder, keeping bin, lib, share and etc together.
-2. Open bin\ghm-gui.exe. Click Login with GitHub and authorize your own account.
-   Login needs a public OAuth Client ID configured when the package is built.
+2. Open bin\ghm-gui.exe and choose Continue with local repositories.
+   GitHub login, when enabled, lets each person authorize their own account.
+   It needs a public OAuth Client ID configured when the package is built;
+   a local-Git candidate works without one.
 3. For the CLI, run bin\ghm.exe --help from PowerShell.
 
 Optional installation (run PowerShell as your normal Windows user):

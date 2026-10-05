@@ -170,6 +170,14 @@ int main(int argc, char **argv)
     CHECK(git_repository_index(&index, repo) == 0 && git_index_write_tree(&before, index) == 0);
     int64_t due = (int64_t)time(NULL) + 60;
     CHECK(ghm_schedule_add_mode(context, path, "frozen staged", &signature, &signature, due, 0, &id, &error) == 0);
+#ifdef _WIN32
+    CHECK(completed(context, alias, id) == 0);
+    GhmScheduledJobList alias_jobs = {0};
+    CHECK(ghm_schedule_list(context, alias, &alias_jobs, &error) == 0);
+    int alias_matches = alias_jobs.count == 1 && alias_jobs.items[0].id == id;
+    ghm_schedule_list_free(&alias_jobs);
+    CHECK(alias_matches);
+#endif
     CHECK(git_index_read(index, 1) == 0 && git_index_write_tree(&after, index) == 0 && git_oid_equal(&before, &after));
     CHECK(ghm_branch_checkout(context, alias, "other", &error) != 0);
     CHECK(put(path, "a.txt", "frozen second\n"));
