@@ -10,17 +10,24 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "platform/io.h"
 
 static char *log_path(int make_directory)
 {
     const char *state_home = getenv("XDG_STATE_HOME");
     const char *home = getenv("HOME");
     char *directory, *path;
+#ifdef _WIN32
+    directory = g_build_filename(state_home != NULL && g_path_is_absolute(state_home) ?
+        state_home : g_get_user_data_dir(), "ghm", "state", NULL);
+    (void)home;
+#else
     if (state_home != NULL && state_home[0] == '/')
         directory = g_build_filename(state_home, "ghm", NULL);
     else if (home != NULL && home[0] == '/')
         directory = g_build_filename(home, ".local", "state", "ghm", NULL);
     else return NULL;
+#endif
     if (make_directory && g_mkdir_with_parents(directory, 0700) != 0) {
         g_free(directory);
         return NULL;

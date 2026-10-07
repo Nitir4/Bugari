@@ -5,12 +5,17 @@
 #include <errno.h>
 #include <curl/curl.h>
 #include <git2.h>
+#ifdef _WIN32
+#include <glib/gstdio.h>
+#endif
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "platform/io.h"
 
+#ifndef _WIN32
 static int make_directory(const char *path, GhmError *error)
 {
     if (mkdir(path, 0700) == 0 || errno == EEXIST) return 0;
@@ -20,9 +25,18 @@ static int make_directory(const char *path, GhmError *error)
     }
     return -1;
 }
+#endif
 
 static char *default_data_directory(void)
 {
+#ifdef _WIN32
+    const char *xdg = g_getenv("XDG_DATA_HOME");
+    char *path = g_build_filename(xdg != NULL && g_path_is_absolute(xdg) ? xdg :
+        g_get_user_data_dir(), "ghm", NULL);
+    for (char *p = path; p != NULL && *p; ++p) if (*p == '\\') *p = '/';
+    char *result = path != NULL ? strdup(path) : NULL;
+    g_free(path); return result;
+#else
     const char *xdg = getenv("XDG_DATA_HOME");
     const char *home = getenv("HOME");
     const char *base = xdg != NULL && xdg[0] == '/' ? xdg : NULL;
@@ -35,10 +49,16 @@ static char *default_data_directory(void)
     result = malloc(length);
     if (result != NULL) (void)snprintf(result, length, "%s%s", base, suffix);
     return result;
+#endif
 }
 
 static int ensure_data_directory(const char *path, GhmError *error)
 {
+#ifdef _WIN32
+    if (g_mkdir_with_parents(path, 0700) == 0) return 0;
+    ghm_error_set(error, GHM_ERROR_IO, "Cannot create Windows application data directory");
+    return -1;
+#else
     char *copy = strdup(path);
     if (copy == NULL) {
         ghm_error_set(error, GHM_ERROR_MEMORY, "Out of memory");
@@ -54,6 +74,7 @@ static int ensure_data_directory(const char *path, GhmError *error)
     int result = make_directory(copy, error);
     free(copy);
     return result;
+#endif
 }
 
 int ghm_context_open(const char *data_directory, GhmContext **out, GhmError *error)
@@ -79,6 +100,12 @@ int ghm_context_open(const char *data_directory, GhmContext **out, GhmError *err
     if (db_path == NULL) { ghm_error_set(error, GHM_ERROR_MEMORY, "Out of memory"); goto fail; }
     (void)snprintf(db_path, path_length, "%s/ghm.db", context->data_directory);
     if (git_libgit2_init() < 0) { ghm_error_from_git(error, "Initialize libgit2"); goto fail; }
+#ifdef _WIN32
+    if (g_getenv("GHM_CA_BUNDLE") == NULL) {
+        char *bundle = ghm_windows_ca_bundle(context->data_directory);
+        if (bundle != NULL) { g_setenv("GHM_CA_BUNDLE", bundle, FALSE); g_free(bundle); }
+    }
+#endif
     const char *ca_bundle = getenv("GHM_CA_BUNDLE");
     if (ca_bundle != NULL && ca_bundle[0] != '\0' &&
         git_libgit2_opts(GIT_OPT_SET_SSL_CERT_LOCATIONS, ca_bundle, NULL) < 0) {

@@ -16,6 +16,9 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef _WIN32
+#include <glib/gwin32.h>
+#endif
 
 #ifndef GHM_GITHUB_CLIENT_ID
 #define GHM_GITHUB_CLIENT_ID ""
@@ -481,8 +484,7 @@ static int login_command(GhmContext *context, int argc, char **argv, GhmError *e
     time_t deadline = time(NULL) + (time_t)device.expires_in;
     interval = device.interval;
     while (time(NULL) < deadline) {
-        struct timespec delay = {.tv_sec = (time_t)(interval < 5 ? 5 : interval), .tv_nsec = 0};
-        while (nanosleep(&delay, &delay) != 0 && errno == EINTR) {}
+        g_usleep((gulong)(interval < 5 ? 5 : interval) * G_USEC_PER_SEC);
         if (ghm_github_auth_poll(id, &device, &status, &token, &interval, error) != 0) goto done;
         if (status == GHM_AUTH_SUCCESS) break;
         if (status == GHM_AUTH_DENIED || status == GHM_AUTH_EXPIRED) {
@@ -512,6 +514,10 @@ done:
 
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    g_auto(GStrv) utf8_argv = g_win32_get_command_line();
+    argc = (int)g_strv_length(utf8_argv); argv = utf8_argv;
+#endif
     GhmContext *context = NULL;
     GhmError error = {0};
     int result = -1;

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "platform/io.h"
 
 int ghm_index_lock_acquire(GhmIndexLock *lock, git_repository *repository, GhmError *error)
 {

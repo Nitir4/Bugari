@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "platform/io.h"
 
 int ghm_repo_find(const char *start, char **out_path, GhmError *error)
 {

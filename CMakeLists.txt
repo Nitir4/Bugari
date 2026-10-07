@@ -16,7 +16,9 @@ pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.12)
 pkg_check_modules(LIBGIT2 REQUIRED IMPORTED_TARGET libgit2)
 pkg_check_modules(LIBCURL REQUIRED IMPORTED_TARGET libcurl)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
-pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1)
+if(NOT WIN32)
+    pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1)
+endif()
 pkg_check_modules(JSON_GLIB REQUIRED IMPORTED_TARGET json-glib-1.0)
 find_package(Threads REQUIRED)
 
@@ -46,10 +48,16 @@ set(GHM_CORE_SOURCES
     src/storage/database.c
     src/storage/migrations.c
 )
+if(WIN32)
+    list(APPEND GHM_CORE_SOURCES src/platform/windows_io.c)
+    set(GHM_PLATFORM_LIBRARIES advapi32 crypt32 ntdll winpthread)
+else()
+    set(GHM_PLATFORM_LIBRARIES PkgConfig::LIBSECRET)
+endif()
 add_library(ghmcore STATIC ${GHM_CORE_SOURCES})
 target_include_directories(ghmcore PUBLIC include PRIVATE src)
 target_link_libraries(ghmcore PUBLIC PkgConfig::LIBGIT2 PkgConfig::LIBCURL
-    PkgConfig::SQLITE3 PkgConfig::LIBSECRET PkgConfig::JSON_GLIB Threads::Threads)
+    PkgConfig::SQLITE3 ${GHM_PLATFORM_LIBRARIES} PkgConfig::JSON_GLIB Threads::Threads)
 target_compile_definitions(ghmcore PRIVATE _POSIX_C_SOURCE=200809L)
 
 set(GHM_GUI_SOURCES
@@ -64,6 +72,10 @@ set(GHM_GUI_SOURCES
     src/gui/window.c
 )
 add_executable(ghm-gui src/gui/application.c ${GHM_GUI_SOURCES})
+if(WIN32)
+    target_sources(ghm-gui PRIVATE src/platform/windows_runtime.c)
+    set_target_properties(ghm-gui PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
 target_include_directories(ghm-gui PRIVATE include src)
 target_link_libraries(ghm-gui PRIVATE ghmcore PkgConfig::GTK4)
 target_compile_definitions(ghm-gui PRIVATE _POSIX_C_SOURCE=200809L)
@@ -71,8 +83,13 @@ if(GHM_GITHUB_CLIENT_ID)
     target_compile_definitions(ghm-gui PRIVATE GHM_GITHUB_CLIENT_ID=\"${GHM_GITHUB_CLIENT_ID}\")
 endif()
 
-add_executable(ghm-worker src/scheduler/worker.c)
-target_include_directories(ghm-worker PRIVATE include)
+if(WIN32)
+    add_executable(ghm-worker src/scheduler/worker_windows.c)
+    set_target_properties(ghm-worker PROPERTIES WIN32_EXECUTABLE TRUE)
+else()
+    add_executable(ghm-worker src/scheduler/worker.c)
+endif()
+target_include_directories(ghm-worker PRIVATE include src)
 target_link_libraries(ghm-worker PRIVATE ghmcore)
 target_compile_definitions(ghm-worker PRIVATE _POSIX_C_SOURCE=200809L)
 
@@ -89,7 +106,7 @@ foreach(target ghmcore ghm-gui ghm-worker ghm)
 endforeach()
 
 include(CTest)
-if(BUILD_TESTING)
+if(BUILD_TESTING AND NOT WIN32)
     # Fault injection is compiled only into this uninstalled test library.
     add_library(ghmcore-fault STATIC ${GHM_CORE_SOURCES} tests/fault_hooks.c)
     target_include_directories(ghmcore-fault PUBLIC include PRIVATE src tests)
@@ -110,11 +127,6 @@ if(BUILD_TESTING)
     target_link_libraries(ghm-full-disk-test PRIVATE ghmcore-fault)
     target_compile_definitions(ghm-full-disk-test PRIVATE _POSIX_C_SOURCE=200809L)
     target_compile_options(ghm-full-disk-test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
-    add_executable(ghm-gui-workflow tests/gui_workflow.c ${GHM_GUI_SOURCES})
-    target_include_directories(ghm-gui-workflow PRIVATE include src tests)
-    target_link_libraries(ghm-gui-workflow PRIVATE ghmcore-fault PkgConfig::GTK4)
-    target_compile_definitions(ghm-gui-workflow PRIVATE _POSIX_C_SOURCE=200809L)
-    target_compile_options(ghm-gui-workflow PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
     # Manual display-dependent smoke harness; never run automatically on user state.
     add_executable(ghm-gui-smoke tests/gui_smoke.c ${GHM_GUI_SOURCES})
     target_include_directories(ghm-gui-smoke PRIVATE include src)
@@ -235,15 +247,55 @@ if(BUILD_TESTING)
     add_test(NAME ghm-file-ops COMMAND ghm-file-ops-test)
 endif()
 
+if(BUILD_TESTING AND WIN32)
+    foreach(test_name auth datetime windows_credentials)
+        add_executable(ghm-${test_name}-test tests/${test_name}_test.c)
+        target_include_directories(ghm-${test_name}-test PRIVATE include src)
+        target_link_libraries(ghm-${test_name}-test PRIVATE ghmcore)
+        target_compile_options(ghm-${test_name}-test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+        add_test(NAME ghm-${test_name} COMMAND ghm-${test_name}-test $<TARGET_FILE:ghm-worker>)
+    endforeach()
+endif()
+
+if(BUILD_TESTING)
+    add_library(ghmcore-portable-test STATIC ${GHM_CORE_SOURCES} tests/fault_hooks.c)
+    target_include_directories(ghmcore-portable-test PUBLIC include PRIVATE src tests)
+    target_link_libraries(ghmcore-portable-test PUBLIC PkgConfig::LIBGIT2 PkgConfig::LIBCURL
+        PkgConfig::SQLITE3 ${GHM_PLATFORM_LIBRARIES} PkgConfig::JSON_GLIB Threads::Threads)
+    target_compile_definitions(ghmcore-portable-test PRIVATE _POSIX_C_SOURCE=200809L GHM_FAULT_TESTING)
+    target_compile_options(ghmcore-portable-test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+    add_executable(ghm-portable-test tests/portable_test.c)
+    target_include_directories(ghm-portable-test PRIVATE include src tests)
+    target_link_libraries(ghm-portable-test PRIVATE ghmcore-portable-test)
+    target_compile_definitions(ghm-portable-test PRIVATE _POSIX_C_SOURCE=200809L)
+    target_compile_options(ghm-portable-test PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+    add_test(NAME ghm-portable COMMAND ghm-portable-test $<TARGET_FILE:ghm-worker>)
+    set_tests_properties(ghm-portable PROPERTIES TIMEOUT 60)
+
+    # Display-dependent integration runs explicitly against disposable fixtures.
+    add_executable(ghm-gui-workflow tests/gui_workflow.c ${GHM_GUI_SOURCES})
+    if(WIN32)
+        target_sources(ghm-gui-workflow PRIVATE src/platform/windows_runtime.c)
+    endif()
+    target_include_directories(ghm-gui-workflow PRIVATE include src tests)
+    target_link_libraries(ghm-gui-workflow PRIVATE ghmcore-portable-test PkgConfig::GTK4)
+    target_compile_definitions(ghm-gui-workflow PRIVATE _POSIX_C_SOURCE=200809L)
+    target_compile_options(ghm-gui-workflow PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+endif()
+
+if(NOT WIN32)
 configure_file(data/io.github.ghm.CommitManager.desktop.in
     ${CMAKE_CURRENT_BINARY_DIR}/io.github.ghm.CommitManager.desktop @ONLY)
 configure_file(data/ghm-worker.service.in
     ${CMAKE_CURRENT_BINARY_DIR}/ghm-worker.service @ONLY)
+endif()
 
 install(TARGETS ghm-gui ghm-worker ghm RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(NOT WIN32)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.ghm.CommitManager.desktop
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ghm-worker.service
     DESTINATION ${CMAKE_INSTALL_DATADIR}/systemd/user)
 install(FILES data/io.github.ghm.CommitManager.svg
     DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+endif()

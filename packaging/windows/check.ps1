@@ -1,0 +1,72 @@
+param([Parameter(Mandatory=$true)][string]$PackagePath, [Parameter(Mandatory=$true)][string]$TestPath)
+$ErrorActionPreference = 'Stop'
+$package = (Resolve-Path $PackagePath).Path
+$tests = (Resolve-Path $TestPath).Path
+$oldPath = $env:PATH
+$sandbox = Join-Path ([System.IO.Path]::GetTempPath()) ('ghm-package-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $sandbox | Out-Null
+$oldData = $env:XDG_DATA_HOME
+$oldState = $env:XDG_STATE_HOME
+try {
+    # The test executable lives in the packaged bin directory and must resolve
+    # all of its libraries there. Build-environment DLLs cannot satisfy imports.
+    $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+    $env:XDG_DATA_HOME = $sandbox
+    $env:XDG_STATE_HOME = $sandbox
+    foreach ($name in @('auth', 'datetime', 'windows_credentials', 'portable')) {
+        $testExe = Join-Path $package "bin\ghm-$name-test.exe"
+        Copy-Item -LiteralPath (Join-Path $tests "ghm-$name-test.exe") -Destination $testExe
+        try {
+            & $testExe (Join-Path $package 'bin\ghm-worker.exe')
+            if ($LASTEXITCODE -ne 0) { throw "Packaged $name test failed: $LASTEXITCODE" }
+        } finally { Remove-Item -LiteralPath $testExe }
+    }
+    # Exercise real widgets and callbacks using only the packaged runtime.
+    $workflowExe = Join-Path $package 'bin\ghm-gui-workflow.exe'
+    Copy-Item -LiteralPath (Join-Path $tests 'ghm-gui-workflow.exe') -Destination $workflowExe
+    $oldRenderer = $env:GSK_RENDERER
+    $oldTimeout = $env:GHM_GUI_TEST_TIMEOUT_SECONDS
+    $oldOutput = $env:GHM_GUI_TEST_OUTPUT_DIR
+    $evidence = Join-Path $tests 'gui-evidence'
+    New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+    $workflow = $null
+    try {
+        $env:GSK_RENDERER = 'cairo'
+        $env:GHM_GUI_TEST_TIMEOUT_SECONDS = '120'
+        $env:GHM_GUI_TEST_OUTPUT_DIR = $evidence
+        $workflow = Start-Process -FilePath $workflowExe -WorkingDirectory $sandbox -PassThru `
+            -RedirectStandardOutput (Join-Path $evidence 'workflow-stdout.txt') `
+            -RedirectStandardError (Join-Path $evidence 'workflow-stderr.txt')
+        if (!$workflow.WaitForExit(600000)) { throw 'Packaged GUI workflow timed out.' }
+        if ($workflow.ExitCode -ne 0) {
+            throw "Packaged GUI workflow failed: $($workflow.ExitCode). $(Get-Content (Join-Path $evidence 'workflow-stderr.txt') -Raw)"
+        }
+        if ((Get-Content (Join-Path $evidence 'workflow-stderr.txt') -Raw) -match '(Gtk|GLib|GLib-GObject)-CRITICAL') {
+            throw 'The packaged GUI workflow emitted a toolkit critical error. Inspect its retained stderr log.'
+        }
+        Get-Content (Join-Path $evidence 'workflow-stdout.txt')
+        Write-Host 'PASS packaged GUI workflow and stress with no MSYS2 on PATH'
+    } finally {
+        if ($workflow -and !$workflow.HasExited) { Stop-Process -Id $workflow.Id; $workflow.WaitForExit() }
+        $env:GSK_RENDERER = $oldRenderer
+        $env:GHM_GUI_TEST_TIMEOUT_SECONDS = $oldTimeout
+        $env:GHM_GUI_TEST_OUTPUT_DIR = $oldOutput
+        Remove-Item -LiteralPath $workflowExe
+    }
+    & (Join-Path $package 'bin\ghm.exe') --help
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged CLI did not start.' }
+    # Starting GTK verifies that bundled schemas, loaders and DLLs work. This
+    # is a startup check; a real Windows 10/11 desktop still needs manual tests.
+    $guiLog = Join-Path $sandbox 'gui-stderr.txt'
+    $gui = Start-Process -FilePath (Join-Path $package 'bin\ghm-gui.exe') -WorkingDirectory $sandbox -PassThru -RedirectStandardError $guiLog
+    try {
+        Start-Sleep -Seconds 8
+        if ($gui.HasExited) { throw "Packaged GUI exited during startup: $($gui.ExitCode). $(Get-Content $guiLog -Raw)" }
+    } finally { if (!$gui.HasExited) { Stop-Process -Id $gui.Id } }
+    Write-Host 'PASS packaged CLI, tests and GUI startup without the build environment on PATH'
+} finally {
+    $env:PATH = $oldPath
+    $env:XDG_DATA_HOME = $oldData
+    $env:XDG_STATE_HOME = $oldState
+    Remove-Item -LiteralPath $sandbox -Recurse -Force
+}
