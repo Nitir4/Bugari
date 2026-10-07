@@ -41,6 +41,9 @@ try {
         if ($workflow.ExitCode -ne 0) {
             throw "Packaged GUI workflow failed: $($workflow.ExitCode). $(Get-Content (Join-Path $evidence 'workflow-stderr.txt') -Raw)"
         }
+        if ((Get-Content (Join-Path $evidence 'workflow-stderr.txt') -Raw) -match '(Gtk|GLib|GLib-GObject)-CRITICAL') {
+            throw 'The packaged GUI workflow emitted a toolkit critical error. Inspect its retained stderr log.'
+        }
         Get-Content (Join-Path $evidence 'workflow-stdout.txt')
         Write-Host 'PASS packaged GUI workflow and stress with no MSYS2 on PATH'
     } finally {
