@@ -118,6 +118,15 @@ static inline int fixture_open(Fixture *fixture, GhmError *error)
         fixture_put(fixture->path, "z.txt", "base z\n") != 0 ||
         ghm_commit_now(fixture->path, "base", &test_signature, &test_signature, fixture->base, error) != 0 ||
         ghm_repo_register(fixture->context, fixture->path, error) != 0) return -1;
+#ifdef _WIN32
+    /* Windows temp paths can use 8.3 aliases. Match the worktree path stored
+     * by repository registration instead of comparing an input spelling. */
+    char *canonical = NULL;
+    if (ghm_repo_find(fixture->path, &canonical, error) != 0) return -1;
+    int path_length = snprintf(fixture->path, sizeof(fixture->path), "%s", canonical);
+    free(canonical);
+    if (path_length < 0 || (size_t)path_length >= sizeof(fixture->path)) return -1;
+#endif
     git_reference *head = NULL;
     if (git_repository_head(&head, fixture->repo) < 0) return -1;
     (void)snprintf(fixture->branch, sizeof(fixture->branch), "%s", git_reference_shorthand(head));

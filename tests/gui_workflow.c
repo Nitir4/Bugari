@@ -425,6 +425,7 @@ static gboolean run(gpointer data)
     }
     return G_SOURCE_CONTINUE;
 stop:
+    (void)capture(state->window, "ghm-gui-failure.png");
     ghm_test_fault_set_global(NULL, NULL);
     if (state->window != NULL) gtk_window_destroy(GTK_WINDOW(state->window));
     g_application_quit(G_APPLICATION(state->app));
