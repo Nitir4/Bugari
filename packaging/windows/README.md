@@ -1,10 +1,15 @@
 # Windows port: developing from Linux
 
-Status: initial port implemented on `feature/windows-support`. The GUI, CLI
-and background worker cross-compile to native x86_64 Windows executables. All
-23 Linux tests and four Windows tests under Wine have passed. Native Windows
-CI and interactive Windows 10/11 desktop checks are separate validation steps;
-the package is a test candidate until those checks pass.
+Status: initial native port implemented on `feature/windows-support`. The
+GUI, CLI and background worker build as native x86_64 Windows executables.
+[Native Windows CI for commit `1a522b4`](https://github.com/Nitir4/Bugari/actions/runs/37295608677)
+passed all four Windows tests, packaged GUI startup with MSYS2 removed from
+PATH, and real Task Scheduler worker installation, startup and uninstall on
+5 October 2026. The same run passed all 23 Linux tests.
+Interactive Windows 10/11 acceptance remains pending; the package is a test
+candidate. See [desktop acceptance](DESKTOP-ACCEPTANCE.md) for the remaining
+checks and an evidence template. Hosted runners use Windows Server and do not
+establish Windows 10/11 login, logout or sleep/resume behavior.
 
 ## Build and test without a local Windows machine
 
@@ -19,7 +24,7 @@ a package containing the application, DLLs and GTK resources, without needing
 MSYS2 or development tools installed.
 
 The [Windows workflow](../../.github/workflows/windows.yml) runs automatically
-when this branch is pushed, and on pull requests. It also runs the Linux suite
+when `master` or `feature/windows-support` is pushed, and on pull requests. It also runs the Linux suite
 to check for regressions. Set the repository's Actions variable
 `GHM_GITHUB_CLIENT_ID` to the public Client ID of your OAuth application with
 Device Flow enabled. Without it, local Git features still work, but a new
@@ -39,7 +44,9 @@ The workflow will:
 5. Assemble a portable directory with its DLLs, GTK resources, dependency
    notices and version information.
 6. Test that directory from PowerShell with the MSYS2 library directories
-   removed from PATH, so missing bundled dependencies cannot be hidden.
+   removed from PATH, including the GTK widget workflow and stress harness,
+   so missing bundled dependencies cannot be hidden. Upload its logs and
+   screenshots as `windows-gui-validation`.
 7. Upload the tested directory as a ZIP artifact, with a SHA-256 checksum.
    An artifact is a test download; publishing a release is a separate step.
 
@@ -65,8 +72,11 @@ python packaging/windows/bundle.py --build build-windows --prefix /ucrt64 \
 Run packaging into a fresh output directory. The tests use disposable
 repositories, include a synthetic Credential Manager round trip, and verify
 interrupted publication and SQLite completion recovery. They do not sign in to
-GitHub. The PowerShell package check reruns them with MSYS2 removed from PATH
-and checks GUI startup. Linux namespace/fork stress tests have not all been
+GitHub. The PowerShell package check reruns them with MSYS2 removed from PATH,
+drives the GUI workflow/stress harness, and checks production GUI startup.
+The workflow harness uses disposable repositories, simulated rate limits and
+a local bare remote; it does not sign in or push to GitHub.
+Linux namespace/fork stress tests have not all been
 ported; the Windows suite is not equal in coverage to the Linux suite.
 
 ## Platform implementations
@@ -136,6 +146,8 @@ Windows 10/11 desktop: GUI startup, browser/device login, token persistence,
 background worker installation, logout/login, sleep/resume, and uninstall.
 CI results do not establish those interactive desktop behaviors. Keep the
 first candidate explicitly marked as a test build until these checks pass.
+Release preparation and validation evidence are recorded in
+[the release notes](RELEASE-NOTES.md).
 
 ## References
 

@@ -2,7 +2,7 @@ name: Windows candidate
 
 on:
   push:
-    branches: [feature/windows-support]
+    branches: [master, feature/windows-support]
   pull_request:
   workflow_dispatch:
 
@@ -66,7 +66,7 @@ jobs:
       - name: Bundle runtime
         run: |
           pacman -Q > build-windows/packages.txt
-          python packaging/windows/bundle.py --build build-windows --prefix /ucrt64 --output dist/GitHubCommitManager-0.1.0-windows-x86_64 --inventory build-windows/packages.txt
+          python packaging/windows/bundle.py --build build-windows --prefix /ucrt64 --output dist/GitHubCommitManager-0.1.0-windows-x86_64 --inventory build-windows/packages.txt --source-commit "${{ github.sha }}"
       - name: Check package without MSYS2 on PATH
         shell: pwsh
         run: |
@@ -90,4 +90,11 @@ jobs:
         with:
           name: windows-test-logs
           path: build-windows/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+      - name: Upload GUI validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-gui-validation
+          path: build-windows/gui-evidence
           if-no-files-found: ignore

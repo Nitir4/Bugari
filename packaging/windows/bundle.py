@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import struct
@@ -43,7 +44,9 @@ def imports(path):
             yield data[name_offset:data.index(0, name_offset)].decode('ascii')
             cursor += 20
 
-def bundle(build, prefix, output, version, inventory=None):
+def bundle(build, prefix, output, version, inventory=None, source_commit=None):
+    if source_commit is not None and re.fullmatch(r'[0-9a-fA-F]{40}', source_commit) is None:
+        raise ValueError('Source commit must be a full 40-character Git SHA')
     if output.exists():
         raise ValueError(f'Output already exists; choose an empty directory: {output}')
     binary = output / 'bin'
@@ -98,9 +101,10 @@ def bundle(build, prefix, output, version, inventory=None):
     if inventory is not None:
         shutil.copy2(inventory, output / 'third-party/packages.txt')
     repo_root = Path(__file__).resolve().parents[2]
-    for name in ['install.ps1', 'uninstall.ps1', 'USER-README.txt']:
+    for name in ['install.ps1', 'uninstall.ps1', 'USER-README.txt', 'DESKTOP-ACCEPTANCE.md']:
         shutil.copy2(repo_root / 'packaging/windows' / name, output / name)
     metadata = {'version': version, 'architecture': 'x86_64', 'toolchain': 'UCRT64',
+                'source_commit': source_commit,
                 'dlls': sorted(bundled), 'validation': 'test candidate; desktop checks required'}
     (output / 'build-info.json').write_text(json.dumps(metadata, indent=2) + '\n')
     files = sorted(p for p in output.rglob('*') if p.is_file())
@@ -121,5 +125,6 @@ if __name__ == '__main__':
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--version', default='0.1.0')
     parser.add_argument('--inventory', type=Path)
+    parser.add_argument('--source-commit', help='Full Git SHA for package provenance')
     args = parser.parse_args()
-    bundle(args.build.resolve(), args.prefix.resolve(), args.output.resolve(), args.version, args.inventory)
+    bundle(args.build.resolve(), args.prefix.resolve(), args.output.resolve(), args.version, args.inventory, args.source_commit)

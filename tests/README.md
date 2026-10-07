@@ -24,7 +24,8 @@ not silently counted as Windows coverage.
 
 ## GUI workflow and stress
 
-Run from a desktop session or an Xvfb display:
+The workflow harness builds on Linux and Windows. On Linux, run from a
+desktop session or an Xvfb display:
 
 ```sh
 GSK_RENDERER=cairo ./build/ghm-gui-workflow
@@ -35,7 +36,11 @@ covers the editor, files, staging, commit dates, branches, merge, local history
 rewrite, scheduled jobs, retry confirmations, warnings, shortcuts and window
 closure during asynchronous work. Stress includes rapid view switching and a
 large file tree. It does not sign in or write to a hosted repository. Screenshots
-are written under `/tmp`. Slow virtual machines may set
+are written under the system temporary directory; `GHM_GUI_TEST_OUTPUT_DIR`
+selects an evidence directory. Windows CI also runs the harness against the
+bundled runtime with MSYS2 removed from PATH and uploads logs/screenshots.
+This validates native widgets and local workflows on Windows Server, while
+Windows 10/11 browser login and session/power checks remain manual. Slow virtual machines may set
 `GHM_GUI_TEST_TIMEOUT_SECONDS` to a bounded value between 15 and 120.
 
 `ghm-gui-smoke` provides an additional manual display harness. Its defaults use

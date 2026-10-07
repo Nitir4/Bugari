@@ -34,3 +34,6 @@ the GUI. Application data, repositories and Credential Manager login are kept.
 SHA256SUMS lists package file checksums. Third-party notices are in third-party.
 Report failures with the Windows version and the application's developer log;
 do not send passwords or access tokens.
+
+DESKTOP-ACCEPTANCE.md contains the Windows 10/11 test steps and result template.
+Record the build-info.json source_commit and ZIP checksum with your results.
