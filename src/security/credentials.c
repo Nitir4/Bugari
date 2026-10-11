@@ -2,16 +2,83 @@
 #include "core/git.h"
 
 #include <json-glib/json-glib.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <wincred.h>
+#else
 #include <libsecret/secret.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+static WCHAR *credential_name(const char *id)
+{
+    char *target = g_strdup_printf("io.github.ghm.oauth:%s", id);
+    WCHAR *name = (WCHAR *)g_utf8_to_utf16(target, -1, NULL, NULL, NULL);
+    g_free(target); return name;
+}
+static gboolean credential_save(const char *id, const char *text, GError **error)
+{
+    WCHAR *name = credential_name(id);
+    size_t size = strlen(text);
+    gboolean ok = FALSE;
+    if (name != NULL && size <= CRED_MAX_CREDENTIAL_BLOB_SIZE) {
+        CREDENTIALW credential = {.Type = CRED_TYPE_GENERIC, .TargetName = name,
+            .CredentialBlobSize = (DWORD)size, .CredentialBlob = (LPBYTE)text,
+            .Persist = CRED_PERSIST_LOCAL_MACHINE, .UserName = L"GitHub OAuth"};
+        ok = CredWriteW(&credential, 0);
+    }
+    g_free(name);
+    if (!ok) g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+        "Cannot save login in Windows Credential Manager");
+    return ok;
+}
+static char *credential_get(const char *id, GError **error)
+{
+    WCHAR *name = credential_name(id);
+    PCREDENTIALW credential = NULL;
+    char *text = NULL;
+    if (name != NULL && CredReadW(name, CRED_TYPE_GENERIC, 0, &credential)) {
+        text = g_strndup((const char *)credential->CredentialBlob, credential->CredentialBlobSize);
+        CredFree(credential);
+    } else if (name == NULL || GetLastError() != ERROR_NOT_FOUND) {
+        g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+            "Cannot read login from Windows Credential Manager");
+    }
+    g_free(name); return text;
+}
+static void credential_delete(const char *id, GError **error)
+{
+    WCHAR *name = credential_name(id);
+    if (name == NULL || (!CredDeleteW(name, CRED_TYPE_GENERIC, 0) && GetLastError() != ERROR_NOT_FOUND))
+        g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+            "Cannot remove login from Windows Credential Manager");
+    g_free(name);
+}
+static void credential_free(char *text)
+{
+    if (text != NULL) { SecureZeroMemory(text, strlen(text)); g_free(text); }
+}
+#else
 static const SecretSchema oauth_schema = {
     .name = "io.github.ghm.oauth",
     .flags = SECRET_SCHEMA_NONE,
     .attributes = {{"client-id", SECRET_SCHEMA_ATTRIBUTE_STRING}, {NULL, 0}}
 };
+
+static gboolean credential_save(const char *id, const char *text, GError **error)
+{
+    return secret_password_store_sync(&oauth_schema, SECRET_COLLECTION_DEFAULT,
+        "GitHub Commit Manager OAuth session", text, NULL, error, "client-id", id, NULL);
+}
+static char *credential_get(const char *id, GError **error)
+{ return secret_password_lookup_sync(&oauth_schema, NULL, error, "client-id", id, NULL); }
+static void credential_delete(const char *id, GError **error)
+{ (void)secret_password_clear_sync(&oauth_schema, NULL, error, "client-id", id, NULL); }
+static void credential_free(char *text) { secret_password_free(text); }
+#endif
 
 int ghm_credentials_store(const char *client_id, const GhmOAuthToken *token, GhmError *error)
 {
@@ -35,9 +102,7 @@ int ghm_credentials_store(const char *client_id, const GhmOAuthToken *token, Ghm
     serialized = json_to_string(root, FALSE);
     json_node_free(root);
     if (serialized == NULL) { ghm_error_set(error, GHM_ERROR_MEMORY, "Out of memory"); return -1; }
-    stored = secret_password_store_sync(&oauth_schema, SECRET_COLLECTION_DEFAULT,
-                                        "GitHub Commit Manager OAuth session", serialized,
-                                        NULL, &secret_error, "client-id", client_id, NULL);
+    stored = credential_save(client_id, serialized, &secret_error);
     volatile char *bytes = (volatile char *)serialized;
     for (size_t i = 0, length = strlen(serialized); i < length; ++i) bytes[i] = '\0';
     g_free(serialized);
@@ -65,8 +130,7 @@ int ghm_credentials_load(const char *client_id, GhmOAuthToken *out, GhmError *er
         return -1;
     }
     *out = (GhmOAuthToken){0};
-    serialized = secret_password_lookup_sync(&oauth_schema, NULL, &secret_error,
-                                             "client-id", client_id, NULL);
+    serialized = credential_get(client_id, &secret_error);
     if (secret_error != NULL) {
         ghm_error_set(error, GHM_ERROR_SECRET, secret_error->message);
         g_clear_error(&secret_error);
@@ -110,7 +174,7 @@ int ghm_credentials_load(const char *client_id, GhmOAuthToken *out, GhmError *er
 done:
     g_clear_error(&parse_error);
     g_clear_object(&parser);
-    secret_password_free(serialized);
+    credential_free(serialized);
     return result;
 }
 
@@ -121,8 +185,7 @@ int ghm_credentials_clear(const char *client_id, GhmError *error)
         ghm_error_set(error, GHM_ERROR_ARGUMENT, "Client ID is required");
         return -1;
     }
-    (void)secret_password_clear_sync(&oauth_schema, NULL, &secret_error,
-                                      "client-id", client_id, NULL);
+    credential_delete(client_id, &secret_error);
     if (secret_error != NULL) {
         ghm_error_set(error, GHM_ERROR_SECRET, secret_error->message);
         g_clear_error(&secret_error);

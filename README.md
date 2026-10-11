@@ -1,6 +1,10 @@
 # GitHub Commit Manager
 
-Native Linux repository manager, built with C17, GTK4, libgit2 and SQLite.
+Native repository manager, built with C17, GTK4, libgit2 and SQLite.
+Linux is the established platform; the initial Windows port is a test
+candidate. See [Windows builds and validation](packaging/windows/README.md)
+for developing from Linux using a Windows CI runner, downloading a portable
+Windows package, and installing the optional background worker.
 The project is in active development. The workbench and application dialogs
 use dark mode with GTK's Adwaita theme.
 

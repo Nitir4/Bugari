@@ -19,6 +19,7 @@ static int commit_with_mode(const char *repository_path, const char *message,
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "platform/io.h"
 
 int ghm_commit_default_identity(const char *repository_path, char **out_name,
                                 char **out_email, GhmError *error)
@@ -275,7 +276,7 @@ static int make_signature(git_signature **out, const GhmCommitSignature *input,
     if (input == NULL || input->name == NULL || input->name[0] == '\0' ||
         input->email == NULL || input->email[0] == '\0' ||
         input->offset_minutes < -14 * 60 || input->offset_minutes > 14 * 60 ||
-        input->timestamp < 0 || input->timestamp > LONG_MAX) {
+        input->timestamp < 0 || input->timestamp > INT64_MAX) {
         ghm_error_set(error, GHM_ERROR_ARGUMENT, "Invalid commit identity or timestamp");
         return -1;
     }

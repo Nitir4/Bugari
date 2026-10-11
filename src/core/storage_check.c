@@ -5,11 +5,29 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <sys/statvfs.h>
+#endif
 #include <unistd.h>
+#include "platform/io.h"
 
 int ghm_storage_check(const char *directory, uint64_t bytes, GhmError *error)
 {
+#ifdef _WIN32
+    if (ghm_fault("storage.check", error) != 0) return -1;
+    WCHAR *path = (WCHAR *)g_utf8_to_utf16(directory, -1, NULL, NULL, NULL);
+    ULARGE_INTEGER available;
+    int ok = path != NULL && GetDiskFreeSpaceExW(path, &available, NULL, NULL);
+    g_free(path);
+    uint64_t needed = bytes > UINT64_MAX - 1048576U ? UINT64_MAX : bytes + 1048576U;
+    if (!ok || access(directory, W_OK) != 0) {
+        ghm_error_set(error, GHM_ERROR_IO, "Cannot check destination permissions or free disk space"); return -1;
+    }
+    if (available.QuadPart < needed) {
+        ghm_error_set(error, GHM_ERROR_IO, "Not enough free disk space; nothing was started"); return -1;
+    }
+    return 0;
+#else
     struct statvfs space;
     if (ghm_fault("storage.check", error) != 0) return -1;
     if (access(directory, W_OK | X_OK) != 0) {
@@ -26,6 +44,7 @@ int ghm_storage_check(const char *directory, uint64_t bytes, GhmError *error)
         return -1;
     }
     return 0;
+#endif
 }
 
 int ghm_storage_check_parent(const char *path, uint64_t bytes, GhmError *error)
@@ -41,6 +60,18 @@ int ghm_storage_check_parent(const char *path, uint64_t bytes, GhmError *error)
 
 int ghm_storage_check_descriptor(int directory, uint64_t bytes, GhmError *error)
 {
+#ifdef _WIN32
+    HANDLE handle = (HANDLE)_get_osfhandle(directory);
+    DWORD length = GetFinalPathNameByHandleW(handle, NULL, 0, FILE_NAME_NORMALIZED);
+    WCHAR *path = length > 0 ? malloc(((size_t)length + 1) * sizeof(*path)) : NULL;
+    if (path == NULL || GetFinalPathNameByHandleW(handle, path, length + 1, FILE_NAME_NORMALIZED) == 0) {
+        free(path); ghm_error_set(error, GHM_ERROR_IO, "Cannot inspect save destination"); return -1;
+    }
+    char *utf8 = g_utf16_to_utf8((const gunichar2 *)path, -1, NULL, NULL, NULL);
+    free(path);
+    int result = utf8 != NULL ? ghm_storage_check(utf8, bytes, error) : -1;
+    g_free(utf8); return result;
+#else
     struct statvfs space;
     if (ghm_fault("storage.check", error) != 0) return -1;
     if (faccessat(directory, ".", W_OK | X_OK, 0) != 0 || fstatvfs(directory, &space) != 0 || space.f_frsize == 0) {
@@ -51,6 +82,7 @@ int ghm_storage_check_descriptor(int directory, uint64_t bytes, GhmError *error)
         ghm_error_set(error, GHM_ERROR_IO, "Not enough free disk space; save was not started"); return -1;
     }
     return 0;
+#endif
 }
 
 int ghm_repository_storage_check(const char *path, GhmError *error)

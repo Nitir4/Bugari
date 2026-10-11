@@ -1702,6 +1702,9 @@ GtkWidget *ghm_window_new(GtkApplication *application, GhmContext *context)
     g_signal_connect(account_button, "clicked", G_CALLBACK(account_clicked), window);
     g_signal_connect(github_button, "clicked", G_CALLBACK(github_clicked), window);
     g_signal_connect(window, "close-request", G_CALLBACK(window_close_requested), NULL);
+#ifdef _WIN32
+    g_signal_connect(window, "unmap", G_CALLBACK(ghm_window_clear_focus), NULL);
+#endif
     g_signal_connect(window, "unrealize", G_CALLBACK(window_unrealized), state);
     GFile *job_directory = g_file_new_for_path(ghm_context_data_directory(context));
     state->job_monitor = g_file_monitor_directory(job_directory, G_FILE_MONITOR_NONE, NULL, NULL);

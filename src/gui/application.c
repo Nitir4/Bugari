@@ -2,6 +2,10 @@
 
 #include <ghm/ghm.h>
 #include <gtk/gtk.h>
+#ifdef _WIN32
+#include <glib/gwin32.h>
+#include "platform/windows_runtime.h"
+#endif
 
 static void activate(GtkApplication *application, gpointer user_data)
 {
@@ -25,6 +29,11 @@ static void activate(GtkApplication *application, gpointer user_data)
 
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    g_auto(GStrv) utf8_argv = g_win32_get_command_line();
+    argc = (int)g_strv_length(utf8_argv); argv = utf8_argv;
+    if (ghm_windows_gui_runtime() != 0) return 1;
+#endif
     /* The application owns its dark theme, independently of a theme override. */
     g_unsetenv("GTK_THEME");
     GtkApplication *application = gtk_application_new("io.github.ghm.CommitManager", G_APPLICATION_DEFAULT_FLAGS);

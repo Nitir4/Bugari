@@ -7,6 +7,10 @@
 #include <ghm/history.h>
 #include <ghm/remote.h>
 #include <stdatomic.h>
+#include <glib/gstdio.h>
+#ifdef _WIN32
+#include "platform/windows_runtime.h"
+#endif
 typedef struct {
     GtkApplication *app; GtkWidget *window; GtkWidget *second_window;
     Fixture primary, secondary;
@@ -21,6 +25,15 @@ typedef struct {
     unsigned stress;
     char initial_branch[128], previous[GHM_OID_HEX_CAPACITY];
 } Workflow;
+static int capture(GtkWidget *window, const char *name)
+{
+    const char *directory = g_getenv("GHM_GUI_TEST_OUTPUT_DIR");
+    if (directory == NULL || directory[0] == '\0') directory = g_get_tmp_dir();
+    if (window == NULL || g_mkdir_with_parents(directory, 0700) != 0) return -1;
+    char *path = g_build_filename(directory, name, NULL);
+    int result = gui_capture(window, path);
+    g_free(path); return result;
+}
 static int network_warning(const char *point, GhmError *error, void *payload)
 {
     (void)payload;
@@ -120,7 +133,7 @@ static gboolean run(gpointer data)
     Workflow *state = data;
     GtkWidget *dialog, *entry, *editor, *button, *widget;
     GhmError error = {0};
-    if (g_get_monotonic_time() > state->deadline) { fprintf(stderr, "GUI timeout at step %u\n", state->step); (void)gui_capture(state->window, "/tmp/ghm-gui-timeout.png"); state->failed = 1; goto stop; }
+    if (g_get_monotonic_time() > state->deadline) { fprintf(stderr, "GUI timeout at step %u\n", state->step); (void)capture(state->window, "ghm-gui-timeout.png"); state->failed = 1; goto stop; }
     switch (state->step) {
     case 0:
         widget = gui_type(state->window, GTK_TYPE_DROP_DOWN, 0); WAIT(widget != NULL);
@@ -266,7 +279,7 @@ static gboolean run(gpointer data)
         ghm_test_fault_set_global(network_warning, NULL); CHECK(gui_click(state->window, "Push")); next(state); break;
     case 44:
         WAIT(gui_find(state->window, "GitHub rate limit reached", 2) != NULL);
-        WAIT(gui_capture(state->window, "/tmp/ghm-gui-rate-warning.png") == 0);
+        WAIT(capture(state->window, "ghm-gui-rate-warning.png") == 0);
         CHECK(gui_click(state->window, "Dismiss warning")); ghm_test_fault_set_global(NULL, NULL);
         CHECK(gui_click(state->window, "Push")); next(state); break;
     case 45: WAIT(gui_find(state->window, "Pushed commit", 2) != NULL); CHECK(gui_click(state->window, "Fetch")); next(state); break;
@@ -348,7 +361,7 @@ static gboolean run(gpointer data)
         if (++state->stress == 60) { success("60 rapid repository pairs and view/status refreshes, small-window layout"); next(state); }
         break;
     case 63:
-        WAIT(gui_capture(state->window, "/tmp/ghm-gui-stress.png") == 0);
+        WAIT(capture(state->window, "ghm-gui-stress.png") == 0);
         CHECK(gui_view(state->window, "Explorer")); WAIT(gui_click(state->window, "New File"));
         state->step = 70; next(state); break;
     case 71:
@@ -367,7 +380,8 @@ static gboolean run(gpointer data)
         CHECK(fixture_put(state->primary.path, "b-binary.bin", "\xff\xfe\x80") == 0);
         char *large = g_malloc0(600000); memset(large, 'a', 599999);
         CHECK(fixture_put(state->primary.path, "b-large.txt", large) == 0); g_free(large);
-        char folder[600]; (void)snprintf(folder, sizeof(folder), "%s/b-folder", state->primary.path); CHECK(mkdir(folder, 0700) == 0);
+        char *folder = g_build_filename(state->primary.path, "b-folder", NULL);
+        int created = g_mkdir(folder, 0700); g_free(folder); CHECK(created == 0);
         CHECK(fixture_put(state->primary.path, "b-folder/nested.txt", "nested\n") == 0);
         for (unsigned i = 0; i < 5100; ++i) { char name[64]; (void)snprintf(name, sizeof(name), "bulk-%05u.txt", i); CHECK(fixture_put(state->primary.path, name, "stress\n") == 0); }
         CHECK(gui_view(state->window, "Source Control"));
@@ -411,6 +425,7 @@ static gboolean run(gpointer data)
     }
     return G_SOURCE_CONTINUE;
 stop:
+    (void)capture(state->window, "ghm-gui-failure.png");
     ghm_test_fault_set_global(NULL, NULL);
     if (state->window != NULL) gtk_window_destroy(GTK_WINDOW(state->window));
     g_application_quit(G_APPLICATION(state->app));
@@ -422,7 +437,7 @@ static void activate(GtkApplication *application, gpointer data)
     GhmError error = {0};
     GhmContext *context = NULL;
     git_remote *remote = NULL; git_config *config = NULL;
-    char path[512], oid[GHM_OID_HEX_CAPACITY];
+    char path[sizeof(state->primary.root) + 64], oid[GHM_OID_HEX_CAPACITY];
     state->app = application;
     g_application_hold(G_APPLICATION(application));
     if (fixture_open(&state->primary, &error) != 0 || fixture_open(&state->secondary, &error) != 0 ||
@@ -449,8 +464,11 @@ failed:
 int main(void)
 {
     Workflow state = {0};
-    (void)setenv("GHM_GITHUB_CLIENT_ID", "", 1);
-    (void)unsetenv("GTK_THEME");
+    (void)g_setenv("GHM_GITHUB_CLIENT_ID", "", TRUE);
+    g_unsetenv("GTK_THEME");
+#ifdef _WIN32
+    if (ghm_windows_gui_runtime() != 0) return 1;
+#endif
     GtkApplication *application = gtk_application_new("io.github.ghm.WorkflowTest", G_APPLICATION_NON_UNIQUE);
     g_signal_connect(application, "activate", G_CALLBACK(activate), &state);
     int status = g_application_run(G_APPLICATION(application), 0, NULL);

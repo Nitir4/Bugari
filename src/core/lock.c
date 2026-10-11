@@ -6,14 +6,17 @@
 #include <fcntl.h>
 #include <git2.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <sys/file.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
+#include "platform/io.h"
 
 struct GhmRepoLock {
     int descriptor;
-    dev_t device;
-    ino_t inode;
+    uint64_t device;
+    uint64_t inode;
     unsigned depth;
     struct GhmRepoLock *next;
 };
@@ -58,7 +61,7 @@ int ghm_directory_lock_acquire(const char *directory, const char *name,
             return 0;
         }
     }
-    if (flock(descriptor, LOCK_EX | LOCK_NB) != 0) {
+    if (ghm_platform_lock(descriptor) != 0) {
         int busy = errno == EWOULDBLOCK || errno == EAGAIN;
         close(descriptor);
         ghm_error_set(error, busy ? GHM_ERROR_BUSY : GHM_ERROR_IO,

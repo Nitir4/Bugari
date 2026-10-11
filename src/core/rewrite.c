@@ -28,8 +28,8 @@ static int ghm_commit_rewrite_head_unlocked(GhmContext *context, const char *rep
     if (context == NULL || repository_path == NULL || repository_path[0] == '\0' ||
         expected_oid == NULL || git_oid_fromstr(&old_oid, expected_oid) < 0 ||
         message == NULL || message[0] == '\0' || out_oid == NULL ||
-        author_timestamp < 0 || author_timestamp > LONG_MAX ||
-        committer_timestamp < 0 || committer_timestamp > LONG_MAX ||
+        author_timestamp < 0 || author_timestamp > INT64_MAX ||
+        committer_timestamp < 0 || committer_timestamp > INT64_MAX ||
         author_offset < -14 * 60 || author_offset > 14 * 60 ||
         committer_offset < -14 * 60 || committer_offset > 14 * 60) {
         ghm_error_set(error, GHM_ERROR_ARGUMENT, "Valid repository, HEAD ID, message and dates are required");

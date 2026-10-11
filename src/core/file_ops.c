@@ -9,13 +9,16 @@
 #include <fcntl.h>
 #include <git2.h>
 #include <inttypes.h>
+#ifndef _WIN32
 #include <linux/fs.h>
+#endif
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "platform/io.h"
 
 #define GHM_TEXT_LIMIT (512U * 1024U)
 
@@ -28,6 +31,21 @@ static void file_error(GhmError *error, const char *operation)
 
 static int valid_segment(const char *segment)
 {
+#ifdef _WIN32
+    size_t length = strlen(segment);
+    if (length == 0 || segment[length - 1] == '.' || segment[length - 1] == ' ' ||
+        strpbrk(segment, "\\:<>\"|?*") != NULL || g_ascii_strcasecmp(segment, ".git") == 0 ||
+        (length >= 5 && g_ascii_strncasecmp(segment, "git~", 4) == 0)) return 0;
+    for (const unsigned char *p = (const unsigned char *)segment; *p; ++p)
+        if (*p < 32) return 0;
+    const char *dot = strchr(segment, '.');
+    size_t stem = dot != NULL ? (size_t)(dot - segment) : length;
+    if ((stem == 3 && (g_ascii_strncasecmp(segment, "CON", 3) == 0 ||
+        g_ascii_strncasecmp(segment, "PRN", 3) == 0 ||
+        g_ascii_strncasecmp(segment, "AUX", 3) == 0 || g_ascii_strncasecmp(segment, "NUL", 3) == 0)) ||
+        (stem == 4 && (g_ascii_strncasecmp(segment, "COM", 3) == 0 ||
+        g_ascii_strncasecmp(segment, "LPT", 3) == 0) && segment[3] >= '1' && segment[3] <= '9')) return 0;
+#endif
     return segment[0] != '\0' && strcmp(segment, ".") != 0 &&
            strcmp(segment, "..") != 0 && strcmp(segment, ".git") != 0;
 }

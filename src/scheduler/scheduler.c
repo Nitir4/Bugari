@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include "platform/io.h"
 
 typedef struct {
     int64_t id;
@@ -133,6 +134,13 @@ int ghm_schedule_list(GhmContext *context, const char *repository_path,
         return -1;
     }
     *out = (GhmScheduledJobList){0};
+#ifdef _WIN32
+    /* libgit2 expands Windows short names during registration. Resolve input
+     * with the same API before comparing it with the stored worktree root. */
+    char *normalized = NULL;
+    if (ghm_repo_find(repository_path, &normalized, error) != 0) return -1;
+    repository_path = normalized;
+#endif
     pthread_mutex_lock(&context->database_mutex);
     if (sqlite3_prepare_v2(context->db, sql, -1, &stmt, NULL) != SQLITE_OK ||
         bind_text(stmt, 1, repository_path) != SQLITE_OK) goto db_fail;
@@ -172,6 +180,9 @@ done:
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&context->database_mutex);
     if (result != 0) ghm_schedule_list_free(out);
+#ifdef _WIN32
+    free(normalized);
+#endif
     return result;
 }
 
@@ -179,7 +190,7 @@ static int valid_signature(const GhmCommitSignature *signature)
 {
     return signature != NULL && signature->name != NULL && signature->name[0] != '\0' &&
            signature->email != NULL && signature->email[0] != '\0' &&
-           signature->timestamp >= 0 && signature->timestamp <= LONG_MAX &&
+           signature->timestamp >= 0 && signature->timestamp <= INT64_MAX &&
            signature->offset_minutes >= -14 * 60 && signature->offset_minutes <= 14 * 60;
 }
 
@@ -932,9 +943,18 @@ int ghm_schedule_add_options(GhmContext *context, const char *repository_path,
                              int64_t *out_job_id, GhmError *error)
 {
     GhmRepoLock *lock = NULL;
-    if (ghm_repo_lock_acquire(repository_path, &lock, error) != 0) return -1;
-    int result = ghm_schedule_add_options_unlocked(context, repository_path, message, author, committer, execute_at, stage_all, push_after_commit, out_job_id, error);
+#ifdef _WIN32
+    char *normalized = NULL;
+    if (ghm_repo_find(repository_path, &normalized, error) != 0) return -1;
+    repository_path = normalized;
+#endif
+    int result = -1;
+    if (ghm_repo_lock_acquire(repository_path, &lock, error) == 0)
+        result = ghm_schedule_add_options_unlocked(context, repository_path, message, author, committer, execute_at, stage_all, push_after_commit, out_job_id, error);
     ghm_repo_lock_release(lock);
+#ifdef _WIN32
+    free(normalized);
+#endif
     return result;
 }
 
