@@ -1,0 +1,19 @@
+Source: ghm
+Section: devel
+Priority: optional
+Maintainer: @MAINTAINER@
+Build-Depends: debhelper-compat (= 13), cmake, pkg-config,
+ libgtk-4-dev (>= 4.12), libgit2-dev, libcurl4-openssl-dev,
+ libsqlite3-dev, libsecret-1-dev, libjson-glib-dev, desktop-file-utils
+Standards-Version: 4.7.0
+Homepage: https://github.com/Nitir4/Bugari
+Rules-Requires-Root: no
+
+Package: ghm
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: xdg-utils
+Description: native Git repository and scheduled commit manager
+ GitHub Commit Manager provides a GTK workbench and a command-line client
+ for local Git repositories, GitHub device login, staging, commits,
+ branches, and scheduled commits. An optional per-user worker runs jobs.

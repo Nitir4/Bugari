@@ -1,0 +1,53 @@
+Name:           ghm
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Native Git repository and scheduled commit manager
+License:        @LICENSE@
+URL:            https://github.com/Nitir4/Bugari
+Source0:        %{url}/releases/download/v%{version}/ghm-%{version}.tar.gz
+
+BuildRequires:  gcc
+BuildRequires:  cmake
+BuildRequires:  make
+BuildRequires:  pkgconfig(gtk4) >= 4.12
+BuildRequires:  pkgconfig(libgit2)
+BuildRequires:  pkgconfig(libcurl)
+BuildRequires:  pkgconfig(sqlite3)
+BuildRequires:  pkgconfig(libsecret-1)
+BuildRequires:  pkgconfig(json-glib-1.0)
+BuildRequires:  desktop-file-utils
+BuildRequires:  systemd-rpm-macros
+Recommends:     xdg-utils
+
+%description
+GitHub Commit Manager provides a GTK workbench and a command-line client for
+local Git repositories, GitHub device login, staging, commits, branches, and
+scheduled commits. An optional per-user worker runs scheduled jobs.
+
+%prep
+%autosetup
+
+%build
+%cmake -DBUILD_TESTING=ON -DGHM_GITHUB_CLIENT_ID=@CLIENT_ID@ -DGHM_SYSTEMD_USER_UNIT_DIR=%{_userunitdir}
+%cmake_build
+
+%check
+%ctest
+
+%install
+%cmake_install
+desktop-file-validate %{buildroot}%{_datadir}/applications/io.github.ghm.CommitManager.desktop
+
+%files
+%license LICENSE
+%doc README.md
+%{_bindir}/ghm
+%{_bindir}/ghm-gui
+%{_bindir}/ghm-worker
+%{_datadir}/applications/io.github.ghm.CommitManager.desktop
+%{_datadir}/icons/hicolor/scalable/apps/io.github.ghm.CommitManager.svg
+%{_userunitdir}/ghm-worker.service
+
+%changelog
+* @RPM_DATE@ @MAINTAINER@ - @VERSION@-1
+- Initial native package.

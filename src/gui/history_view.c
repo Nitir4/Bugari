@@ -1,4 +1,5 @@
 #include "gui/dialog.h"
+#include "gui/commit_message.h"
 #include "gui/history_view.h"
 
 #include <ghm/history.h>
@@ -307,7 +308,7 @@ static void rewrite_submit(GtkButton *button, gpointer user_data)
         g_free(message_text);
         return;
     }
-    if (message_text[0] == '\0') {
+    if (!ghm_commit_message_has_text(dialog_state->message)) {
         gtk_label_set_text(GTK_LABEL(dialog_state->feedback), "Enter a commit message.");
         g_free(message_text);
         return;
@@ -366,27 +367,22 @@ static void rewrite_clicked(GtkButton *button, gpointer user_data)
     cancel = gtk_button_new_with_label("Back");
     state = g_new0(RewriteDialog, 1);
     state->view = view;
-    state->message = gtk_text_view_new();
-    gtk_widget_set_size_request(state->message, -1, 90);
+    GtkWidget *message_editor = ghm_commit_message_editor_new("New HEAD commit message",
+                                                             history->head_message, &state->message);
     state->confirmed = gtk_check_button_new_with_label(
         "I understand this replaces HEAD and changes its commit SHA");
     state->feedback = gtk_label_new("");
+    ghm_commit_message_bind_feedback(state->message, state->feedback);
     state->submit = gtk_button_new_with_label("Rewrite Local HEAD");
     gtk_window_set_title(GTK_WINDOW(dialog), "Rewrite History — HEAD Only");
     ghm_dialog_attach(dialog, history->parent);
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 740, 600);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 740, 680);
     gtk_widget_set_margin_start(root, 20);
     gtk_widget_set_margin_end(root, 20);
     gtk_widget_set_margin_top(root, 20);
     gtk_widget_set_margin_bottom(root, 20);
-    gtk_box_append(GTK_BOX(root), gtk_label_new("New HEAD commit message"));
-    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(state->message)),
-                             history->head_message, -1);
-    GtkWidget *message_scroll = gtk_scrolled_window_new();
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(message_scroll), state->message);
-    gtk_widget_set_size_request(message_scroll, -1, 100);
-    gtk_box_append(GTK_BOX(root), message_scroll);
+    gtk_box_append(GTK_BOX(root), message_editor);
     gtk_box_append(GTK_BOX(dates), rewrite_date_column("Author date (local time)",
         history->author_timestamp, &state->author_calendar,
         &state->author_hour, &state->author_minute));
@@ -403,17 +399,16 @@ static void rewrite_clicked(GtkButton *button, gpointer user_data)
     gtk_box_append(GTK_BOX(root), warning);
     gtk_box_append(GTK_BOX(root), state->confirmed);
     gtk_label_set_xalign(GTK_LABEL(state->feedback), 0.0f);
-    gtk_box_append(GTK_BOX(root), state->feedback);
     gtk_widget_add_css_class(state->submit, "destructive-action");
     gtk_box_append(GTK_BOX(actions), cancel);
     gtk_box_append(GTK_BOX(actions), state->submit);
-    gtk_box_append(GTK_BOX(root), actions);
-    gtk_window_set_child(GTK_WINDOW(dialog), root);
+    ghm_dialog_set_scrollable_content(dialog, root, state->feedback, actions);
     g_object_set_data_full(G_OBJECT(dialog), "ghm-rewrite-dialog", state, g_free);
     g_signal_connect_swapped(cancel, "clicked", G_CALLBACK(gtk_window_destroy), dialog);
     g_signal_connect(state->submit, "clicked", G_CALLBACK(rewrite_submit), dialog);
     g_signal_connect(dialog, "close-request", G_CALLBACK(rewrite_close_requested), state);
     gtk_window_present(GTK_WINDOW(dialog));
+    gtk_widget_grab_focus(state->message);
 }
 
 GtkWidget *ghm_history_view_new(GtkWidget *parent, GhmContext *context,

@@ -1,4 +1,5 @@
 #include "gui/dialog.h"
+#include "gui/commit_message.h"
 #include "gui/commit_view.h"
 
 #include <ghm/commit.h>
@@ -206,7 +207,7 @@ static void submit_clicked(GtkButton *button, gpointer user_data)
     CommitTask *request;
     GTask *task;
     (void)button;
-    if (gtk_editable_get_text(GTK_EDITABLE(state->message))[0] == '\0') {
+    if (!ghm_commit_message_has_text(state->message)) {
         gtk_label_set_text(GTK_LABEL(state->feedback), "Enter a commit message.");
         return;
     }
@@ -221,7 +222,7 @@ static void submit_clicked(GtkButton *button, gpointer user_data)
         return;
     }
     request->path = strdup(state->path);
-    request->message = strdup(gtk_editable_get_text(GTK_EDITABLE(state->message)));
+    request->message = ghm_commit_message_dup(state->message);
     if (request->path == NULL || request->message == NULL) {
         task_free(request);
         gtk_label_set_text(GTK_LABEL(state->feedback), "Out of memory.");
@@ -272,9 +273,10 @@ void ghm_commit_dialog_show(GtkWidget *parent, const char *repository_path,
         return;
     }
     state->created = created;
-    state->message = gtk_entry_new();
+    GtkWidget *message_editor = ghm_commit_message_editor_new("Commit message", NULL, &state->message);
     state->staged_list = gtk_list_box_new();
     state->feedback = gtk_label_new("Only staged files will be committed. Use Stage in the Changes tab first.");
+    ghm_commit_message_bind_feedback(state->message, state->feedback);
     state->submit = gtk_button_new_with_label("Create Commit");
     gtk_widget_set_sensitive(state->submit, FALSE);
     state->cancel = cancel;
@@ -282,13 +284,12 @@ void ghm_commit_dialog_show(GtkWidget *parent, const char *repository_path,
     gtk_window_set_title(GTK_WINDOW(dialog), "Commit Staged Changes");
     ghm_dialog_attach(dialog, parent);
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 740, 650);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 740, 720);
     gtk_widget_set_margin_start(root, 20);
     gtk_widget_set_margin_end(root, 20);
     gtk_widget_set_margin_top(root, 20);
     gtk_widget_set_margin_bottom(root, 20);
-    gtk_box_append(GTK_BOX(root), gtk_label_new("Commit message"));
-    gtk_box_append(GTK_BOX(root), state->message);
+    gtk_box_append(GTK_BOX(root), message_editor);
     GtkWidget *staged_heading = gtk_label_new("Staged files included in this commit");
     gtk_label_set_xalign(GTK_LABEL(staged_heading), 0.0f);
     gtk_box_append(GTK_BOX(root), staged_heading);
@@ -312,13 +313,11 @@ void ghm_commit_dialog_show(GtkWidget *parent, const char *repository_path,
     gtk_box_append(GTK_BOX(root), note);
     gtk_label_set_xalign(GTK_LABEL(state->feedback), 0.0f);
     gtk_label_set_wrap(GTK_LABEL(state->feedback), TRUE);
-    gtk_box_append(GTK_BOX(root), state->feedback);
     gtk_widget_set_hexpand(cancel, TRUE);
     gtk_widget_set_halign(cancel, GTK_ALIGN_END);
     gtk_box_append(GTK_BOX(actions), cancel);
     gtk_box_append(GTK_BOX(actions), state->submit);
-    gtk_box_append(GTK_BOX(root), actions);
-    gtk_window_set_child(GTK_WINDOW(dialog), root);
+    ghm_dialog_set_scrollable_content(dialog, root, state->feedback, actions);
     g_object_set_data_full(G_OBJECT(dialog), "ghm-commit-state", state, state_free);
     g_signal_connect(dialog, "close-request", G_CALLBACK(close_requested), state);
     g_signal_connect(cancel, "clicked", G_CALLBACK(cancel_clicked), dialog);
@@ -334,5 +333,6 @@ void ghm_commit_dialog_show(GtkWidget *parent, const char *repository_path,
         } else staged_task_free(request);
     }
     gtk_window_present(GTK_WINDOW(dialog));
+    gtk_widget_grab_focus(state->message);
     g_date_time_unref(now);
 }

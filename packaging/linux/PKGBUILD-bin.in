@@ -1,0 +1,18 @@
+# Maintainer: @MAINTAINER@
+pkgname=ghm-bin
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Native Git repository and scheduled commit manager (upstream binary)'
+arch=('x86_64')
+url='https://github.com/Nitir4/Bugari'
+license=('@LICENSE@')
+depends=('gtk4>=4.12' 'libgit2' 'curl' 'sqlite' 'libsecret' 'json-glib')
+optdepends=('xdg-utils: open browser for GitHub device login')
+provides=("ghm=$pkgver")
+conflicts=('ghm')
+source=("ghm-$pkgver-arch-x86_64.tar.gz::$url/releases/download/v$pkgver/ghm-$pkgver-arch-x86_64.tar.gz")
+sha256sums=('@BINARY_SHA256@')
+
+package() {
+  cp -a "$srcdir/usr" "$pkgdir/"
+}

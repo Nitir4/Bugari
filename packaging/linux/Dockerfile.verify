@@ -1,0 +1,17 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+ARG DISTRO
+COPY . /checks/
+RUN case "$DISTRO" in \
+      fedora) dnf install -y /checks/*.rpm git xorg-x11-server-Xvfb xorg-x11-xauth \
+                  dbus-daemon dejavu-sans-fonts desktop-file-utils && dnf clean all ;; \
+      debian) apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                  /checks/*.deb git xvfb xauth dbus-x11 fonts-dejavu-core desktop-file-utils \
+                  && rm -rf /var/lib/apt/lists/* ;; \
+      arch) pacman -Syu --noconfirm --needed git xorg-server-xvfb xorg-xauth dbus \
+                  ttf-dejavu desktop-file-utils \
+                  && pacman -U --noconfirm /checks/*.pkg.tar.zst ;; \
+      *) exit 2 ;; \
+    esac && useradd --create-home tester
+USER tester
+ENTRYPOINT ["sh", "/checks/check-installed.sh"]

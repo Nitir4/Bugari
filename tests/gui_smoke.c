@@ -185,10 +185,10 @@ static gboolean exercise_dialogs(gpointer data)
     case 1: click(state, state->window, "Commit Staged"); break;
     case 2:
         dialog = dialog_named("Commit Staged Changes");
-        entry = dialog != NULL ? find_widget(dialog, "", 5) : NULL;
+        entry = dialog != NULL ? find_widget(dialog, "", 4) : NULL;
         if (entry == NULL) state->failed = 1;
         else {
-            gtk_editable_set_text(GTK_EDITABLE(entry), "GHM validation: desktop commit dialog");
+            gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), "GHM validation: desktop commit dialog", -1);
             click(state, dialog, "Create Commit");
         }
         break;
@@ -207,10 +207,10 @@ static gboolean exercise_dialogs(gpointer data)
         break;
     case 4:
         dialog = dialog_named("Schedule Commit");
-        entry = dialog != NULL ? find_widget(dialog, "", 5) : NULL;
+        entry = dialog != NULL ? find_widget(dialog, "", 4) : NULL;
         if (entry == NULL) state->failed = 1;
         else {
-            gtk_editable_set_text(GTK_EDITABLE(entry), "GHM validation: desktop schedule then cancel");
+            gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), "GHM validation: desktop schedule then cancel", -1);
             click(state, dialog, "Schedule Commit");
         }
         break;

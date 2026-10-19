@@ -1,0 +1,10 @@
+FROM debian:13
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake pkg-config libgtk-4-dev libgit2-dev \
+    libcurl4-openssl-dev libsqlite3-dev libsecret-1-dev libjson-glib-dev \
+    debhelper dpkg-dev desktop-file-utils python3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home builder
+COPY packaging/linux/ /recipe/
+ENTRYPOINT ["sh", "/recipe/container-build.sh", "debian"]

@@ -23,8 +23,9 @@ GSK_RENDERER=cairo ./build/ghm-gui-workflow
 ```
 
 This harness drives real GTK widgets in an isolated application workspace. It
-covers the editor, files, staging, commit dates, branches, merge, local history
-rewrite, scheduled jobs, retry confirmations, warnings, shortcuts and window
+covers the editor, files, staging, multiline commit messages, commit dates,
+branches, merge, local history rewrite, scheduled jobs, retry confirmations,
+warnings, shortcuts and window
 closure during asynchronous work. Stress includes rapid view switching and a
 large file tree. It does not sign in or write to a hosted repository. Screenshots
 are written under `/tmp`. Slow virtual machines may set

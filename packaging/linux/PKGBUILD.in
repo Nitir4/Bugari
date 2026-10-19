@@ -1,0 +1,33 @@
+# Maintainer: @MAINTAINER@
+pkgname=ghm
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Native Git repository and scheduled commit manager'
+arch=('x86_64')
+url='https://github.com/Nitir4/Bugari'
+license=('@LICENSE@')
+depends=('gtk4>=4.12' 'libgit2' 'curl' 'sqlite' 'libsecret' 'json-glib')
+makedepends=('cmake' 'pkgconf')
+checkdepends=('desktop-file-utils')
+optdepends=('xdg-utils: open browser for GitHub device login')
+source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
+sha256sums=('@SOURCE_SHA256@')
+
+build() {
+  cmake -S "$pkgname-$pkgver" -B build \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+    -DBUILD_TESTING=ON -DGHM_GITHUB_CLIENT_ID=@CLIENT_ID@ \
+    -DGHM_SYSTEMD_USER_UNIT_DIR=/usr/lib/systemd/user
+  cmake --build build
+}
+
+check() {
+  ctest --test-dir build --output-on-failure
+  desktop-file-validate build/io.github.ghm.CommitManager.desktop
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 "$srcdir/$pkgname-$pkgver/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/$pkgname-$pkgver/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

@@ -243,7 +243,9 @@ configure_file(data/ghm-worker.service.in
 install(TARGETS ghm-gui ghm-worker ghm RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.ghm.CommitManager.desktop
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+set(GHM_SYSTEMD_USER_UNIT_DIR "${CMAKE_INSTALL_DATADIR}/systemd/user"
+    CACHE PATH "Installation directory for the optional systemd user worker")
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ghm-worker.service
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/systemd/user)
+    DESTINATION ${GHM_SYSTEMD_USER_UNIT_DIR})
 install(FILES data/io.github.ghm.CommitManager.svg
     DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)

@@ -5,10 +5,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int remove_tree(const char *path)
 {
+    struct stat metadata;
+    if (lstat(path, &metadata) != 0) return -1;
+    if (!S_ISDIR(metadata.st_mode)) return unlink(path);
     DIR *directory = opendir(path);
     struct dirent *entry;
     if (directory == NULL) return unlink(path);

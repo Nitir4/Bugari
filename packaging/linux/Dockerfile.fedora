@@ -1,0 +1,9 @@
+FROM fedora:43
+RUN dnf install -y gcc cmake make rpm-build redhat-rpm-config \
+    pkgconf-pkg-config gtk4-devel libgit2-devel libcurl-devel sqlite-devel \
+    libsecret-devel json-glib-devel desktop-file-utils systemd-rpm-macros \
+    python3 tar gzip findutils && dnf clean all \
+    && useradd --create-home builder
+RUN dnf install -y util-linux && dnf clean all
+COPY packaging/linux/ /recipe/
+ENTRYPOINT ["sh", "/recipe/container-build.sh", "fedora"]

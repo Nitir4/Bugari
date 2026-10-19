@@ -1,0 +1,6 @@
+FROM archlinux:base
+RUN pacman -Syu --noconfirm --needed base-devel cmake pkgconf gtk4 libgit2 \
+    curl sqlite libsecret json-glib python desktop-file-utils \
+    && useradd --create-home builder
+COPY packaging/linux/ /recipe/
+ENTRYPOINT ["sh", "/recipe/container-build.sh", "arch"]

@@ -25,6 +25,10 @@ The package does not require installing GTK or libgit2 on the target machine.
 
 ## Build
 
+Native Fedora RPM, Debian 13 DEB, and Arch packages can be built with the
+[Linux release recipes](packaging/linux/README.md). That guide covers licensing,
+package checks, Fedora COPR, Arch AUR, and Debian's official submission process.
+
 On Arch Linux:
 
 ```sh

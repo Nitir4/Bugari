@@ -7,6 +7,11 @@
 #include <ghm/history.h>
 #include <ghm/remote.h>
 #include <stdatomic.h>
+static const char staged_message[] = "GUI staged commit\n\nExplain the staged changes.\nKeep paragraphs and UTF-8: café.\n";
+static const char scheduled_message[] = "GUI scheduled job\n\nDescribe the frozen snapshot.\n";
+static const char edited_message[] = "GUI edited job\n\nUpdated description, same frozen files.\n";
+static const char rewritten_message[] = "GUI rewritten HEAD\n\nPreserve the amended description.\n";
+
 typedef struct {
     GtkApplication *app; GtkWidget *window; GtkWidget *second_window;
     Fixture primary, secondary;
@@ -38,7 +43,7 @@ static int delayed_write(const char *point, GhmError *error, void *payload)
 static int head_message(const char *path, const char *message, char *oid)
 {
     GhmHistory history = {0}; GhmError error = {0};
-    int result = ghm_commit_get_history(path, 1, &history, &error) == 0 && history.count == 1 && strcmp(history.items[0].summary, message) == 0;
+    int result = ghm_commit_get_history(path, 1, &history, &error) == 0 && history.count == 1 && strcmp(history.items[0].message, message) == 0;
     if (result && oid != NULL) (void)snprintf(oid, GHM_OID_HEX_CAPACITY, "%s", history.items[0].oid);
     ghm_history_free(&history); return result;
 }
@@ -188,14 +193,26 @@ static gboolean run(gpointer data)
     case 20:
         dialog = gui_dialog("Commit Staged Changes"); WAIT(dialog != NULL);
         button = gui_find(dialog, "Create Commit", 0); WAIT(button != NULL && gtk_widget_get_sensitive(button));
+        gtk_window_set_default_size(GTK_WINDOW(dialog), 740, 520);
+        WAIT(gtk_widget_get_height(dialog) <= 520);
+        graphene_rect_t bounds;
+        CHECK(gtk_widget_compute_bounds(button, dialog, &bounds));
+        CHECK(bounds.origin.y >= 0 && bounds.origin.y + bounds.size.height <= (float)gtk_widget_get_height(dialog));
         CHECK(gui_click(dialog, "Create Commit")); CHECK(gui_find(dialog, "Enter a commit message", 2) != NULL);
-        entry = gui_type(dialog, GTK_TYPE_ENTRY, 0); CHECK(entry != NULL);
-        gtk_editable_set_text(GTK_EDITABLE(entry), "GUI staged commit");
+        entry = gui_type(dialog, GTK_TYPE_TEXT_VIEW, 0); CHECK(entry != NULL);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), " \n\t\342\200\203", -1);
+        CHECK(gui_click(dialog, "Create Commit")); CHECK(gui_find(dialog, "Enter a commit message", 2) != NULL);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), staged_message, -1);
+        CHECK(gui_find(dialog, "Enter a commit message", 2) == NULL);
         state->author_time = choose_time(dialog, 0, -2, 10); state->committer_time = choose_time(dialog, 1, -1, 11);
         CHECK(state->author_time > 0 && state->committer_time > state->author_time);
-        CHECK(gui_click(dialog, "Create Commit")); next(state); break;
+        state->step = 89; next(state); break;
+    case 90:
+        dialog = gui_dialog("Commit Staged Changes"); WAIT(dialog != NULL);
+        WAIT(gui_capture(dialog, "/tmp/ghm-commit-message-editor.png") == 0);
+        CHECK(gui_click(dialog, "Create Commit")); state->step = 20; next(state); break;
     case 21:
-        WAIT(gui_dialog("Commit Staged Changes") == NULL && head_message(state->primary.path, "GUI staged commit", NULL));
+        WAIT(gui_dialog("Commit Staged Changes") == NULL && head_message(state->primary.path, staged_message, NULL));
         GhmHistory metadata = {0}; CHECK(ghm_commit_get_history(state->primary.path, 1, &metadata, &error) == 0);
         CHECK(metadata.items[0].author_timestamp == state->author_time && metadata.items[0].committer_timestamp == state->committer_time);
         ghm_history_free(&metadata);
@@ -215,8 +232,8 @@ static gboolean run(gpointer data)
     case 27:
         dialog = gui_dialog("Commit Staged Changes"); WAIT(dialog != NULL);
         button = gui_find(dialog, "Create Commit", 0); WAIT(button != NULL && gtk_widget_get_sensitive(button));
-        entry = gui_type(dialog, GTK_TYPE_ENTRY, 0); CHECK(entry != NULL);
-        gtk_editable_set_text(GTK_EDITABLE(entry), "GUI feature commit"); CHECK(gui_click(dialog, "Create Commit")); next(state); break;
+        entry = gui_type(dialog, GTK_TYPE_TEXT_VIEW, 0); CHECK(entry != NULL);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), "GUI feature commit", -1); CHECK(gui_click(dialog, "Create Commit")); next(state); break;
     case 28: WAIT(gui_dialog("Commit Staged Changes") == NULL && head_message(state->primary.path, "GUI feature commit", state->previous)); CHECK(gui_view(state->window, "Branches")); next(state); break;
     case 29: WAIT(gui_branch_action(state->window, state->initial_branch, "Checkout")); next(state); break;
     case 30: WAIT(current_branch(state->primary.path, state->initial_branch)); WAIT(gui_branch_action(state->window, "ui-feature", "Merge into current")); next(state); break;
@@ -227,32 +244,36 @@ static gboolean run(gpointer data)
     case 33:
         dialog = gui_dialog("Rewrite History — HEAD Only"); WAIT(dialog != NULL);
         editor = gui_type(dialog, GTK_TYPE_TEXT_VIEW, 0); WAIT(editor != NULL);
-        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(editor)), "GUI rewritten HEAD", -1);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(editor)), rewritten_message, -1);
         CHECK(gui_click(dialog, "Rewrite Local HEAD"));
         CHECK(gui_find(dialog, "Confirm the history change first", 2) != NULL);
         button = gui_type(dialog, GTK_TYPE_CHECK_BUTTON, 0); CHECK(button != NULL);
         gtk_check_button_set_active(GTK_CHECK_BUTTON(button), TRUE);
         CHECK(gui_click(dialog, "Rewrite Local HEAD")); next(state); break;
     case 34:
-        WAIT(gui_dialog("Rewrite History — HEAD Only") == NULL && head_message(state->primary.path, "GUI rewritten HEAD", NULL));
+        WAIT(gui_dialog("Rewrite History — HEAD Only") == NULL && head_message(state->primary.path, rewritten_message, NULL));
         CHECK(!fixture_head_is(state->primary.path, state->previous)); success("history selection and explicitly confirmed HEAD rewrite");
         CHECK(fixture_put(state->primary.path, "a.txt", "GUI scheduled snapshot\n") == 0);
         CHECK(gui_view(state->window, "Source Control")); CHECK(gui_click(state->window, "Schedule Commit")); next(state); break;
     case 35:
         dialog = gui_dialog("Schedule Commit"); WAIT(dialog != NULL);
-        entry = gui_type(dialog, GTK_TYPE_ENTRY, 0); WAIT(entry != NULL);
-        gtk_editable_set_text(GTK_EDITABLE(entry), "GUI scheduled job"); CHECK(gui_click(dialog, "Schedule Commit")); next(state); break;
+        entry = gui_type(dialog, GTK_TYPE_TEXT_VIEW, 0); WAIT(entry != NULL);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), scheduled_message, -1); CHECK(gui_click(dialog, "Schedule Commit")); next(state); break;
     case 36:
-        WAIT(gui_dialog("Schedule Commit") == NULL && latest_job(state, "GUI scheduled job", "PENDING"));
+        WAIT(gui_dialog("Schedule Commit") == NULL && latest_job(state, scheduled_message, "PENDING"));
         CHECK(gui_view(state->window, "Scheduled Jobs")); CHECK(gui_click(state->window, "Refresh Jobs")); next(state); break;
     case 37: WAIT(gui_click(state->window, "Edit Job")); next(state); break;
     case 38:
         dialog = gui_dialog("Edit Scheduled Job"); WAIT(dialog != NULL);
-        entry = gui_type(dialog, GTK_TYPE_ENTRY, 0); WAIT(entry != NULL);
-        gtk_editable_set_text(GTK_EDITABLE(entry), "GUI edited job");
+        entry = gui_type(dialog, GTK_TYPE_TEXT_VIEW, 0); WAIT(entry != NULL);
+        GtkTextIter first, last; GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry));
+        gtk_text_buffer_get_bounds(buffer, &first, &last);
+        char *loaded = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        gboolean intact = strcmp(loaded, scheduled_message) == 0; g_free(loaded); CHECK(intact);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), edited_message, -1);
         button = gui_type(dialog, GTK_TYPE_CHECK_BUTTON, 0); CHECK(button != NULL); gtk_check_button_set_active(GTK_CHECK_BUTTON(button), TRUE);
         CHECK(gui_click(dialog, "Save Job")); next(state); break;
-    case 39: WAIT(gui_dialog("Edit Scheduled Job") == NULL && latest_job(state, "GUI edited job", "PENDING")); WAIT(gui_click(state->window, "Reschedule")); next(state); break;
+    case 39: WAIT(gui_dialog("Edit Scheduled Job") == NULL && latest_job(state, edited_message, "PENDING")); WAIT(gui_click(state->window, "Reschedule")); next(state); break;
     case 40:
         dialog = gui_dialog("Reschedule Job"); WAIT(dialog != NULL);
         state->rescheduled_time = choose_time(dialog, 0, 1, 15); CHECK(state->rescheduled_time > 0);
@@ -260,7 +281,7 @@ static gboolean run(gpointer data)
     case 41: WAIT(gui_dialog("Reschedule Job") == NULL && scheduled_time_is(state)); WAIT(gui_click(state->window, "Cancel Job")); next(state); break;
     case 42: dialog = gui_dialog("Cancel Scheduled Job"); WAIT(dialog != NULL); CHECK(gui_click(dialog, "Cancel Job")); next(state); break;
     case 43:
-        WAIT(gui_dialog("Cancel Scheduled Job") == NULL && latest_job(state, "GUI edited job", "CANCELLED"));
+        WAIT(gui_dialog("Cancel Scheduled Job") == NULL && latest_job(state, edited_message, "CANCELLED"));
         CHECK(fixture_text_is(state->primary.path, "a.txt", "GUI scheduled snapshot\n"));
         success("frozen schedule, metadata edit, reschedule and confirmed cancellation");
         ghm_test_fault_set_global(network_warning, NULL); CHECK(gui_click(state->window, "Push")); next(state); break;
@@ -277,9 +298,9 @@ static gboolean run(gpointer data)
     case 47: WAIT(stage_is(state->primary.path, 1)); WAIT(gui_click(state->window, "Commit Staged")); next(state); break;
     case 48:
         dialog = gui_dialog("Commit Staged Changes"); WAIT(dialog != NULL);
-        entry = gui_type(dialog, GTK_TYPE_ENTRY, 0); WAIT(entry != NULL);
+        entry = gui_type(dialog, GTK_TYPE_TEXT_VIEW, 0); WAIT(entry != NULL);
         button = gui_find(dialog, "Create Commit", 0); WAIT(button != NULL && gtk_widget_get_sensitive(button));
-        gtk_editable_set_text(GTK_EDITABLE(entry), "GUI clean before pull"); CHECK(gui_click(dialog, "Create Commit")); next(state); break;
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), "GUI clean before pull", -1); CHECK(gui_click(dialog, "Create Commit")); next(state); break;
     case 49: WAIT(gui_dialog("Commit Staged Changes") == NULL && head_message(state->primary.path, "GUI clean before pull", NULL)); CHECK(gui_click(state->window, "Push")); next(state); break;
     case 50: WAIT(gui_find(state->window, "Pushed commit", 2) != NULL); CHECK(gui_click(state->window, "Pull")); next(state); break;
     case 51:
@@ -290,8 +311,8 @@ static gboolean run(gpointer data)
         CHECK(gui_click(state->window, "Schedule Commit")); next(state); break;
     case 52:
         dialog = gui_dialog("Schedule Commit"); WAIT(dialog != NULL);
-        entry = gui_type(dialog, GTK_TYPE_ENTRY, 0); WAIT(entry != NULL);
-        gtk_editable_set_text(GTK_EDITABLE(entry), "GUI retry job");
+        entry = gui_type(dialog, GTK_TYPE_TEXT_VIEW, 0); WAIT(entry != NULL);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(entry)), "GUI retry job", -1);
         button = gui_type(dialog, GTK_TYPE_CHECK_BUTTON, 0); CHECK(button != NULL); gtk_check_button_set_active(GTK_CHECK_BUTTON(button), FALSE);
         button = gui_type(dialog, GTK_TYPE_CHECK_BUTTON, 1); CHECK(button != NULL); gtk_check_button_set_active(GTK_CHECK_BUTTON(button), TRUE);
         CHECK(choose_time(dialog, 0, -1, 10) > 0); CHECK(choose_time(dialog, 1, 1, 11) > 0);

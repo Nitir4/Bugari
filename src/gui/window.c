@@ -1,4 +1,5 @@
 #include "gui/dialog.h"
+#include "gui/commit_message.h"
 #include "gui/window.h"
 #include "gui/github_repos_view.h"
 #include "gui/commit_view.h"
@@ -827,14 +828,13 @@ static void job_dialog_submit(GtkButton *button, gpointer user_data)
         g_date_time_unref(date_time);
     }
     if (state->action == 2) {
-        const char *message = gtk_editable_get_text(GTK_EDITABLE(state->message_entry));
         const char *id = ghm_login_view_client_id(state->window);
-        if (message[0] == '\0') {
+        if (!ghm_commit_message_has_text(state->message_entry)) {
             gtk_label_set_text(GTK_LABEL(state->feedback), "Enter a commit message.");
             job_action_task_free(request);
             return;
         }
-        request->message = strdup(message);
+        request->message = ghm_commit_message_dup(state->message_entry);
         request->client_id = id != NULL ? strdup(id) : NULL;
         request->push_after_commit = gtk_check_button_get_active(GTK_CHECK_BUTTON(state->push_check));
         if (request->message == NULL || (id != NULL && request->client_id == NULL)) {
@@ -903,12 +903,13 @@ static void job_action_dialog_show(GtkWidget *window, int64_t job_id,
         gtk_box_append(GTK_BOX(clock), state->minute);
         gtk_box_append(GTK_BOX(root), clock);
     } else if (action == 2) {
-        state->message_entry = gtk_entry_new();
+        GtkWidget *message_editor = ghm_commit_message_editor_new("Commit message (frozen files do not change)",
+                                                                 message, &state->message_entry);
+        ghm_commit_message_bind_feedback(state->message_entry, state->feedback);
+        gtk_window_set_default_size(GTK_WINDOW(dialog), 620, 360);
         state->push_check = gtk_check_button_new_with_label("Push this commit after it is created");
-        gtk_editable_set_text(GTK_EDITABLE(state->message_entry), message != NULL ? message : "");
         gtk_check_button_set_active(GTK_CHECK_BUTTON(state->push_check), push_after_commit != 0);
-        gtk_box_append(GTK_BOX(root), gtk_label_new("Commit message (frozen files do not change)"));
-        gtk_box_append(GTK_BOX(root), state->message_entry);
+        gtk_box_append(GTK_BOX(root), message_editor);
         gtk_box_append(GTK_BOX(root), state->push_check);
     } else {
         GtkWidget *warning = gtk_label_new(
@@ -917,15 +918,19 @@ static void job_action_dialog_show(GtkWidget *window, int64_t job_id,
         gtk_label_set_wrap(GTK_LABEL(warning), TRUE);
         gtk_box_append(GTK_BOX(root), warning);
     }
-    gtk_box_append(GTK_BOX(root), state->feedback);
     gtk_box_append(GTK_BOX(actions), back);
     gtk_box_append(GTK_BOX(actions), submit);
-    gtk_box_append(GTK_BOX(root), actions);
-    gtk_window_set_child(GTK_WINDOW(dialog), root);
+    if (action == 2) ghm_dialog_set_scrollable_content(dialog, root, state->feedback, actions);
+    else {
+        gtk_box_append(GTK_BOX(root), state->feedback);
+        gtk_box_append(GTK_BOX(root), actions);
+        gtk_window_set_child(GTK_WINDOW(dialog), root);
+    }
     g_object_set_data_full(G_OBJECT(dialog), "ghm-job-dialog", state, job_dialog_free);
     g_signal_connect_swapped(back, "clicked", G_CALLBACK(gtk_window_destroy), dialog);
     g_signal_connect(submit, "clicked", G_CALLBACK(job_dialog_submit), dialog);
     gtk_window_present(GTK_WINDOW(dialog));
+    if (action == 2) gtk_widget_grab_focus(state->message_entry);
 }
 
 static void refresh_jobs(GtkWidget *window)
